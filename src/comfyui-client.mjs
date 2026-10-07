@@ -5,8 +5,20 @@ import { setTimeout as pause } from 'node:timers/promises';
 import { imageAttachment, MAX_IMAGE_BYTES } from './attachments.mjs';
 
 export const COMFY_BASE_URL = 'http://192.168.0.175:8188';
-export const COMFY_FIELDS = ['prompt', 'negativePrompt', 'width', 'height', 'steps', 'seed'];
-export const COMFY_DEFAULTS = { negativePrompt: '', width: 1024, height: 1024, steps: 20, seed: -1 };
+export const COMFY_FIELDS = ['prompt', 'negativePrompt', 'width', 'height', 'steps', 'seed', 'cfg'];
+export const COMFY_DEFAULTS = { negativePrompt: '', width: 1024, height: 1024, steps: 20, seed: -1, cfg: 7 };
+export const COMFY_LIMITS = { width: { min: 128, max: 4096, step: 8 }, height: { min: 128, max: 4096, step: 8 }, steps: { min: 1, max: 150, step: 1 }, seed: { min: -1, max: 4294967295, step: 1 }, cfg: { min: 0, max: 100, step: 0.1 } };
+
+export function validateLimits(raw = {}) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Ungültige Parametergrenzen.');
+  const result = structuredClone(COMFY_LIMITS);
+  for (const field of Object.keys(result)) {
+    const limit = { ...result[field], ...raw[field] }; const cap = COMFY_LIMITS[field];
+    if (![limit.min, limit.max, limit.step].every(Number.isFinite) || limit.min < cap.min || limit.max > cap.max || limit.min > limit.max || limit.step < cap.step || (field !== 'cfg' && ![limit.min, limit.max, limit.step].every(Number.isInteger))) throw new Error(`Ungültige Grenzen für ${field}.`);
+    result[field] = { min: limit.min, max: limit.max, step: limit.step };
+  }
+  return result;
+}
 
 export function comfyEndpoints(profile, clientId, promptId) {
   const origin = normalizeOrigin(profile.baseUrl);
@@ -43,17 +55,22 @@ export function validateWorkflow(raw) {
   if (!entries.length || entries.length > 300 || Buffer.byteLength(JSON.stringify(raw)) > 2 * 1024 * 1024) throw new Error('Der API-Workflow ist leer oder zu groß.');
   for (const [id, node] of entries) {
     if (!/^\d{1,12}$/.test(id) || !node || typeof node.class_type !== 'string' || !node.class_type || node.class_type.length > 200 || !node.inputs || typeof node.inputs !== 'object' || Array.isArray(node.inputs)) throw new Error('Ungültiger API-Workflow: Knoten mit class_type und inputs erwartet.');
+    for (const [key, value] of Object.entries(node.inputs)) if (/^(api[_-]?key|password|authorization|access[_-]?token|bearer[_-]?token)$/i.test(key) && typeof value === 'string' && value.trim()) throw new Error('Zugangsdaten gehören in den separaten Zugangstresor, nicht in Workflow-Nodes.');
   }
   return structuredClone(raw);
 }
 
-export function validateImageOptions(raw) {
+export function validateImageOptions(raw, mapping, rawLimits) {
   const options = { ...COMFY_DEFAULTS, ...raw };
   if (typeof options.negativePrompt !== 'string' || options.negativePrompt.length > 4000) throw new Error('Negative Prompt darf maximal 4000 Zeichen enthalten.');
-  for (const field of ['width', 'height']) if (!Number.isInteger(options[field]) || options[field] < 128 || options[field] > 4096 || options[field] % 8) throw new Error('Breite und Höhe: 128–4096 Pixel, jeweils durch 8 teilbar.');
-  if (!Number.isInteger(options.steps) || options.steps < 1 || options.steps > 150) throw new Error('Bitte 1–150 Schritte wählen.');
-  if (!Number.isInteger(options.seed) || options.seed < -1 || options.seed > 4294967295) throw new Error('Seed: -1 für Zufall oder eine Zahl von 0 bis 4294967295.');
-  return Object.fromEntries(Object.keys(COMFY_DEFAULTS).map(key => [key, options[key]]));
+  if (mapping && !mapping.negativePrompt && options.negativePrompt.trim()) throw new Error('Für Negative Prompt ist kein Eingang zugeordnet.');
+  const limits = validateLimits(rawLimits);
+  for (const [field, limit] of Object.entries(limits)) {
+    if (mapping && !mapping[field]) continue;
+    const value = options[field]; const aligned = (value - (['width','height'].includes(field) ? 0 : limit.min)) / limit.step;
+    if (!Number.isFinite(value) || (field !== 'cfg' && !Number.isInteger(value)) || value < limit.min || value > limit.max || Math.abs(aligned - Math.round(aligned)) > 1e-6) throw new Error(`${field}: Wert außerhalb der Profilgrenzen oder des Schrittmaßes.`);
+  }
+  return Object.fromEntries(Object.keys(COMFY_DEFAULTS).filter(key => !mapping || mapping[key]).map(key => [key, options[key]]));
 }
 
 export function validateMapping(nodes, raw) {
@@ -61,7 +78,7 @@ export function validateMapping(nodes, raw) {
   const targets = new Set(); const mapping = {};
   for (const field of COMFY_FIELDS) {
     const target = raw[field];
-    if (field === 'negativePrompt' && target == null) { mapping[field] = null; continue; }
+    if (field !== 'prompt' && target == null) { if (Object.hasOwn(raw, field)) mapping[field] = null; continue; }
     if (!target || typeof target.nodeId !== 'string' || !/^\d{1,12}$/.test(target.nodeId) || !Object.hasOwn(nodes, target.nodeId) || typeof target.input !== 'string' || target.input.length > 100 || ['__proto__','constructor','prototype'].includes(target.input)) throw new Error(`Bitte einen Workflow-Eingang für ${field} wählen.`);
     const node = nodes[target.nodeId];
     if (!node || !Object.hasOwn(node.inputs, target.input) || typeof node.inputs[target.input] !== (['prompt', 'negativePrompt'].includes(field) ? 'string' : 'number')) throw new Error(`Der Eingang für ${field} fehlt oder ist verbunden statt direkt editierbar.`);
@@ -77,8 +94,7 @@ export function prepareComfyWorkflow(entry, prompt, rawOptions) {
   if (!entry?.nodes) throw new Error('Bitte zuerst einen ComfyUI-API-Workflow importieren.');
   if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 4000) throw new Error('Bitte eine Bildbeschreibung bis 4000 Zeichen eingeben.');
   const nodes = validateWorkflow(entry.nodes); const mapping = validateMapping(nodes, entry.mapping);
-  const options = validateImageOptions(rawOptions ?? entry.options);
-  if (!mapping.negativePrompt && options.negativePrompt.trim()) throw new Error('Für Negative Prompt ist noch kein Workflow-Eingang zugeordnet.');
+  const options = validateImageOptions({ ...entry.options, ...rawOptions }, mapping, entry.limits);
   const seed = options.seed === -1 ? randomInt(0, 4294967296) : options.seed;
   for (const [field, value] of Object.entries({ prompt: prompt.trim(), ...options, seed })) {
     const target = mapping[field]; if (target) nodes[target.nodeId].inputs[target.input] = value;

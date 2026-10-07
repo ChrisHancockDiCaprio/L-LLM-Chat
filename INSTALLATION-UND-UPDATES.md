@@ -1,4 +1,6 @@
-# Qwen Chat 0.2.2 installieren
+# KAIROS installieren
+
+Aktueller Stand **0.3.0**: siehe [WORKFLOW-PROFILE.md](WORKFLOW-PROFILE.md) und [Releasehinweise](release/notes-0.3.0.md). KAIROS hieß bisher Qwen Chat; App-ID und Tresorpfad bleiben erhalten. Setup-Dateien heißen jetzt `KAIROS-Setup-0.3.0-x64.exe` / `.msi`. Ältere Installations- und Prüfstände unten sind historisch.
 
 1. Eine laufende Qwen-Chat-App schließen, nachdem Antworten und Eingaben abgeschlossen sind.
 2. `Qwen-Chat-Setup-0.2.2-x64.exe` öffnen. Diese Pilotversion ist noch ohne Windows-Herausgeberzertifikat; die Windows-Anwendungssteuerung kann die Ausführung blockieren. Sicherheitsrichtlinien nicht verändern.

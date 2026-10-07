@@ -1,4 +1,6 @@
-# Server und ComfyUI in 0.2.2
+# Server und ComfyUI
+
+Aktueller Stand **0.3.0**: siehe [WORKFLOW-PROFILE.md](WORKFLOW-PROFILE.md) und [Releasehinweise](release/notes-0.3.0.md). KAIROS hieß bisher Qwen Chat; App-ID und Tresorpfad bleiben erhalten. Setup-Dateien heißen jetzt `KAIROS-Setup-0.3.0-x64.exe` / `.msi`. Ältere Installations- und Prüfstände unten sind historisch.
 
 ## Chatserver
 

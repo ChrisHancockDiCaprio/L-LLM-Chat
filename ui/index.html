@@ -4,13 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'">
-  <title>Qwen Chat</title>
+  <title>KAIROS</title>
   <link rel="stylesheet" href="styles.css">
   <script src="renderer.js" defer></script>
 </head>
 <body>
   <aside class="sidebar">
-    <div class="brand"><img class="brand-mark" src="../assets/sol-icon.svg" alt="SoL"><div><strong>Qwen Chat</strong><span>Dein lokaler Begleiter</span></div></div>
+    <div class="brand"><img class="brand-mark" src="../assets/sol-icon.svg" alt="SoL"><div><strong>KAIROS</strong><span>Knowledge &amp; AI Runtime Orchestration System</span></div></div>
     <button id="new-chat" class="new-chat"><span aria-hidden="true">＋</span> Neues Gespräch</button>
     <div class="section-label">DEINE GESPRÄCHE</div>
     <nav id="session-list" aria-label="Gespeicherte Gespräche"></nav>
@@ -20,6 +20,7 @@
   <main>
     <header class="topbar"><div><span class="eyebrow">DEIN LOKALER CHAT</span><h1 id="chat-title">Neues Gespräch</h1></div><div class="chat-controls">
       <label class="sr-only" for="active-ai">KI für diesen Chat</label><select id="active-ai" aria-label="KI für die nächste Nachricht"></select>
+      <button id="delete-chat" class="secondary-button danger-button" type="button">Chat löschen</button>
       <button id="connection-check" class="connection checking" title="Verbindung erneut prüfen"><span class="status-dot"></span><span id="connection-label">Verbindung prüfen …</span><span class="refresh" aria-hidden="true">↻</span></button>
       </div>
     </header>
@@ -27,10 +28,10 @@
     <div id="context-note" class="context-note" hidden></div>
     <section id="conversation" class="conversation" aria-label="Chatverlauf" aria-live="polite">
       <div id="welcome" class="welcome">
-        <div class="welcome-mark">q<span class="spark">✦</span></div>
+        <div class="welcome-mark">K<span class="spark">✦</span></div>
         <span class="eyebrow">KLEINES MODELL. GROSSE IDEEN.</span>
         <h2>Was liegt an?</h2>
-        <p>Eine Frage, eine Idee oder ein Stück Code.<br>Qwen ist bereit für dein nächstes Gespräch.</p>
+        <p>Eine Frage, eine Idee oder ein Stück Code.<br>Deine KI ist bereit für dein nächstes Gespräch.</p>
         <div class="suggestions">
           <button data-prompt="Erkläre mir ein interessantes technisches Konzept einfach und mit einem Beispiel."><span>◎</span><strong>Etwas verstehen</strong><small>Einfach erklärt, Schritt für Schritt</small></button>
           <button data-prompt="Hilf mir, eine Idee weiterzuentwickeln. Stelle mir zuerst eine kurze Frage dazu."><span>✧</span><strong>Eine Idee entwickeln</strong><small>Gemeinsam weiterdenken</small></button>
@@ -38,18 +39,17 @@
         </div>
       </div>
       <div id="messages" class="messages"></div>
-      <div id="waiting" class="waiting" hidden><span class="avatar qwen-avatar">q</span><div><strong>Qwen</strong><div class="thinking"><i></i><i></i><i></i><span>Antwort wird vorbereitet …</span></div></div></div>
+      <div id="waiting" class="waiting" hidden><span class="avatar qwen-avatar">K</span><div><strong>KI</strong><div class="thinking"><i></i><i></i><i></i><span>Antwort wird vorbereitet …</span></div></div></div>
     </section>
     <footer class="compose-area">
       <form id="chat-form" class="composer">
         <div class="attachment-toolbar"><button id="attach-file" type="button" class="secondary-button">＋ Bild / Datei</button><span id="attachment-help">Bilder, Text und Code anhängen</span></div>
         <div id="attachment-list" class="attachment-list"></div>
         <details id="image-options" hidden><summary>ComfyUI-Bildparameter</summary>
-          <label for="image-negative">Negative Prompt</label><input id="image-negative" maxlength="4000" placeholder="Optional: Was soll vermieden werden?">
-          <div class="model-options-grid"><label>Breite<input id="image-width" type="number" min="128" max="4096" step="8" value="1024" required></label><label>Höhe<input id="image-height" type="number" min="128" max="4096" step="8" value="1024" required></label><label>Schritte<input id="image-steps" type="number" min="1" max="150" value="20" required></label><label>Seed · -1 = Zufall<input id="image-seed" type="number" min="-1" max="4294967295" value="-1" required></label></div>
+          <div id="image-fields" class="model-options-grid"></div>
         </details>
-        <label class="sr-only" for="message-input">Nachricht an Qwen</label>
-        <textarea id="message-input" rows="3" maxlength="4000" placeholder="Schreib Qwen eine Nachricht …"></textarea>
+        <label class="sr-only" for="message-input">Nachricht an die KI</label>
+        <textarea id="message-input" rows="3" maxlength="4000" placeholder="Schreib deiner KI eine Nachricht …"></textarea>
         <div class="composer-bottom"><span>Enter zum Senden <span class="separator">·</span> Shift + Enter für eine neue Zeile</span><button id="send-button" type="submit" disabled><span id="send-label">Senden</span><span id="send-icon" aria-hidden="true">↗</span></button></div>
       </form>
       <div class="footer-note"><span><span class="model-dot"></span> <span id="model-label">Modell auswählen</span></span><span>Historie verschlüsselt gespeichert</span></div>
@@ -100,6 +100,8 @@
         <p id="probe-feedback" class="probe-feedback" role="status"></p>
         <div class="model-options-grid"><div><label for="profile-temperature">Kreativität (0–2)</label><input id="profile-temperature" type="number" min="0" max="2" step="0.1" value="0.7" required></div><div><label for="profile-context">Kontextfenster (Tokens)</label><input id="profile-context" type="number" min="512" max="32768" step="1" value="8192" required></div><div><label for="profile-output">Antwortlimit (Tokens)</label><input id="profile-output" type="number" min="128" max="8192" step="1" value="2048" required></div></div>
         <p class="settings-hint">Chat: Kreativität und Antwortlimit werden übermittelt. Bei OpenAI-kompatiblen Servern begrenzt das Kontextfenster die mitgesendete Historie; die Server-Kontextgröße stellst du dort ein. Bildeingaben benötigen eine gemeldete Vision-Fähigkeit. Neue Modelle bleiben deaktiviert. Entfernte Modelle werden beim Start nicht wieder hinzugefügt.</p>
+        <label class="checkbox-label"><input id="profile-files" type="checkbox" checked> Text- und Code-Dateien für dieses Modell erlauben</label>
+        <label class="checkbox-label"><input id="profile-photos" type="checkbox" checked> Foto-Upload erlauben (Vision-Fähigkeit erforderlich)</label>
         <label class="checkbox-label"><input id="profile-http" type="checkbox"> HTTP ohne Zugangsdaten im Heimnetz erlauben</label>
         <div class="form-bottom"><label class="checkbox-label"><input id="profile-enabled" type="checkbox" checked> In dieser App aktivieren</label><button id="save-profile" class="primary-button" type="submit">Verbindung speichern</button></div>
       </form>
@@ -112,7 +114,7 @@
       <p class="settings-hint">Während der Nutzung braucht die App entschlüsselte Daten im Arbeitsspeicher. Windows-Schutz verhindert keine Zugriffe durch Schadsoftware unter deinem bereits angemeldeten Konto. Bereits vorhandene Klartextkopien auf Datenträgern lassen sich nachträglich nicht garantiert sicher löschen.</p>
     </section>
     <section id="updates-panel" hidden>
-      <div class="concept-intro"><img width="52" height="52" src="../assets/sol-icon.svg" alt="SoL"><div><h3>Qwen Chat <span id="app-version"></span></h3><p>Neue Versionen über GitHub. Deine Gespräche und dein Tresor bleiben erhalten.</p></div></div>
+      <div class="concept-intro"><img width="52" height="52" src="../assets/sol-icon.svg" alt="SoL"><div><h3>KAIROS <span id="app-version"></span></h3><p>Neue Versionen über GitHub. Deine Gespräche und dein Tresor bleiben erhalten.</p></div></div>
       <form id="update-source-form" class="security-card">
         <label for="update-repository"><strong>GitHub-Repository für Updates</strong></label>
         <input id="update-repository" type="url" required maxlength="300" placeholder="https://github.com/Benutzer/Repository" autocomplete="off" spellcheck="false">
@@ -120,6 +122,7 @@
         <div class="update-buttons"><button id="update-source-save" class="primary-button" type="submit">Prüfen &amp; speichern</button><button id="update-source-reset" class="secondary-button" type="button">Änderung verwerfen</button></div>
         <p id="update-source-feedback" role="status"></p><p id="update-source-status" class="settings-hint" role="status"></p>
       </form>
+      <label class="checkbox-label"><input id="update-beta" type="checkbox"> Beta: alle neueren veröffentlichten Versionen einschließlich Pre-Releases anzeigen</label><ul id="update-releases"></ul>
       <div class="security-card"><strong>Deine Version</strong><p id="update-status" role="status"></p><progress id="update-progress" max="100" hidden></progress><div class="update-buttons"><button id="update-check" class="primary-button">Auf Updates prüfen</button><button id="update-download" class="secondary-button" disabled>Herunterladen</button><button id="update-install" class="secondary-button" disabled>Installieren &amp; neu starten</button></div></div>
       <div class="security-card"><strong>Veröffentlichung &amp; Installation</strong><p>Öffentliche GitHub-Releases werden ohne Zugangsschlüssel geprüft. Release-Entwürfe erscheinen nicht als Updates.</p><p>Diese Pilotversion ist noch nicht mit einem Windows-Herausgeberzertifikat signiert. Die Installation aus der App ist deshalb gesperrt. Neue Setup-Dateien kannst du manuell über die bestehende Installation installieren, sofern Windows ihre Ausführung erlaubt.</p></div>
       <p class="settings-hint">Programm: frei wählbarer Installationsordner. Daten: Windows-Tresor unter LocalAppData\QwenChat\Vault. Auch eine Deinstallation bewahrt den Tresor. Er ist an dein Windows-Benutzerkonto gebunden; eine Kopie allein ist keine portable Wiederherstellung.</p>
@@ -131,5 +134,6 @@
       <p class="settings-hint">Das ist eine Konzeptansicht. Sie stellt keine Verbindung her und speichert keine Zugangsdaten. Vorgesehen sind Modellauswahl und eine sichere Ablage des Gateway-Schlüssels.</p>
     </section>
   </dialog>
+<dialog id="chat-delete-dialog"><h3>Chat löschen?</h3><p>Dieses Gespräch und seine ungenutzten Anhänge werden aus dem aktiven Tresor entfernt. Bereits angelegte Update-Sicherungen bleiben bestehen.</p><button id="chat-delete-cancel" class="secondary-button">Behalten</button><button id="chat-delete-confirm" class="primary-button danger-button">Chat löschen</button></dialog>
 </body>
 </html>

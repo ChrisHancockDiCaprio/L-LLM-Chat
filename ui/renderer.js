@@ -3,7 +3,7 @@ const $ = selector => document.querySelector(selector);
 let state; let cancelling = false; let probing = false; let draftAttachments = []; let deletion;
 let appliedRepository;
 let imageProfile;
-const comfyFields = { prompt: 'Prompt', negativePrompt: 'Negative Prompt', width: 'Breite', height: 'Höhe', steps: 'Schritte', seed: 'Seed' };
+const comfyFields = { prompt: 'Prompt', negativePrompt: 'Negative Prompt', width: 'Breite', height: 'Höhe', steps: 'Schritte', seed: 'Seed', cfg: 'CFG' };
 const input = $('#message-input');
 function renderAttachments() {
   $('#attachment-list').replaceChildren(...draftAttachments.map(attachment => {
@@ -15,7 +15,8 @@ function renderAttachments() {
     remove.addEventListener('click', async () => { const result = await api.removeAttachment(attachment.id); if (!result.ok) { error(result.error); return; } draftAttachments = draftAttachments.filter(a => a.id !== attachment.id); renderAttachments(); });
     chip.append(name, remove); return chip;
   }));
-  $('#attach-file').disabled = Boolean(state?.busy || state?.settingsBusy || draftAttachments.length >= 4);
+  const p = state?.settings.profiles.find(p => p.id === state.settings.activeId);
+  $('#attach-file').disabled = !p || p.type === 'comfyui' || !(p.uploads?.files || p.uploads?.photos) || Boolean(state?.busy || state?.settingsBusy || draftAttachments.length >= 4);
 }
 $('#attach-file').addEventListener('click', async () => {
   $('#attach-file').disabled = true;
@@ -39,18 +40,28 @@ function render(next) {
   picker.disabled = state.busy || state.settingsBusy || options.length === 1 && !profile && !state.settings.profiles.some(p => p.enabled);
   $('#model-label').textContent = profile ? `${profile.model} · ${profile.name}` : 'Keine KI ausgewählt · Einstellungen öffnen';
   input.placeholder = profile?.type === 'comfyui' ? 'Beschreibe dein Wunschbild …' : profile ? `Nachricht an ${profile.name} …` : 'Wähle eine KI in den Einstellungen …';
+  const workflow = state.workflows?.[profile?.id];
   $('#image-options').hidden = profile?.type !== 'comfyui';
-  $('#image-options').querySelectorAll('input').forEach(field => { field.disabled = profile?.type !== 'comfyui' || state.busy || state.settingsBusy; });
-  if (imageProfile !== profile?.id) {
-    imageProfile = profile?.id;
-    const options = state.workflows?.[profile?.baseUrl]?.options ?? { negativePrompt: '', width: 1024, height: 1024, steps: 20, seed: -1 };
-    for (const [field, selector] of Object.entries({ negativePrompt: 'negative', width: 'width', height: 'height', steps: 'steps', seed: 'seed' })) $(`#image-${selector}`).value = options[field];
+  const imageSignature = JSON.stringify([profile?.id, workflow?.mapping, workflow?.options, workflow?.limits]);
+  if (imageProfile !== imageSignature) {
+    imageProfile = imageSignature; const rows = [];
+    for (const field of Object.keys(comfyFields).filter(f => f !== 'prompt' && workflow?.mapping?.[f])) {
+      const label = document.createElement('label'); label.textContent = comfyFields[field];
+      const control = document.createElement('input'); control.id = 'image-' + (field === 'negativePrompt' ? 'negative' : field); control.dataset.field = field;
+      control.type = field === 'negativePrompt' ? 'text' : 'number'; control.value = workflow.options[field] ?? '';
+      if (field === 'negativePrompt') control.maxLength = 4000;
+      else { Object.assign(control, workflow.limits[field]); control.required = true; }
+      label.append(control); rows.push(label);
+    }
+    $('#image-fields').replaceChildren(...rows);
   }
+  $('#image-options').querySelectorAll('input').forEach(field => { field.disabled = state.busy || state.settingsBusy; });
   $('#attachment-help').textContent = profile?.type === 'comfyui' ? 'ComfyUI · eigener Text-zu-Bild-Workflow' : profile?.type === 'image-api' ? 'Bilder anhängen zum Bearbeiten · Text beschreibt dein Wunschbild' : profile?.capabilities?.includes('vision') ? 'Bilder, Text und Code · dieses Modell versteht Bilder' : 'Text und Code · dieses Modell versteht keine Bilder';
-  $('#attach-file').disabled = profile?.type === 'comfyui' || state.busy || state.settingsBusy || draftAttachments.length >= 4;
+  $('#attach-file').disabled = !profile || !(profile.uploads?.files || profile.uploads?.photos) || profile?.type === 'comfyui' || state.busy || state.settingsBusy || draftAttachments.length >= 4;
   $('#attachment-list').querySelectorAll('button').forEach(button => { button.disabled = state.busy; });
   $('#waiting strong').textContent = profile?.model ?? 'KI';
   $('#chat-title').textContent = active.title;
+  $('#delete-chat').disabled = state.busy || state.settingsBusy;
   $('#connection-check').className = `connection ${state.connection.state}`;
   $('#connection-label').textContent = state.connection.state === 'online' ? (profile?.baseUrl.startsWith('http:') ? 'HTTP · Heimnetz' : 'HTTPS · Verbunden') : state.connection.message;
   $('#connection-check').title = `${state.connection.message} · Klicken zum erneuten Prüfen`;
@@ -74,10 +85,10 @@ function render(next) {
   $('#welcome').hidden = active.messages.length > 0;
   const messages = active.messages.map(message => {
     const row = document.createElement('article'); row.className = `message ${message.role}`;
-    const avatar = document.createElement('span'); avatar.className = message.role === 'assistant' ? 'avatar qwen-avatar' : 'avatar'; avatar.textContent = message.role === 'assistant' ? 'q' : 'Du';
+    const avatar = document.createElement('span'); avatar.className = message.role === 'assistant' ? 'avatar qwen-avatar' : 'avatar'; avatar.textContent = message.role === 'assistant' ? 'K' : 'Du';
     const main = document.createElement('div'); main.className = 'message-main';
     const header = document.createElement('div'); header.className = 'message-header';
-    const author = document.createElement('strong'); author.textContent = message.role === 'assistant' ? (message.model ?? 'Qwen') : 'Du';
+    const author = document.createElement('strong'); author.textContent = message.role === 'assistant' ? (message.model ?? 'KI') : 'Du';
     const stamp = document.createElement('time'); stamp.textContent = time(message.createdAt); stamp.dateTime = message.createdAt;
     header.append(author, stamp);
     const body = document.createElement('div'); body.className = 'message-body'; body.textContent = message.content;
@@ -103,7 +114,7 @@ function render(next) {
   $('#waiting .thinking span').textContent = state.imageProgress?.message ?? 'Antwort wird vorbereitet …';
   error(state.notice);
   $('#context-note').hidden = !state.omittedRounds;
-  $('#context-note').textContent = 'Ältere Nachrichten bleiben gespeichert. Für diese Antwort erhält Qwen nur den neuesten Teil des Gesprächs.';
+  $('#context-note').textContent = 'Ältere Nachrichten bleiben gespeichert. Für diese Antwort erhält das ausgewählte Modell nur den neuesten Teil des Gesprächs.';
   updateSend();
   renderSettings();
   renderUpdates();
@@ -115,6 +126,8 @@ function renderUpdates() {
   const changed = $('#update-repository').value.trim() !== appliedRepository;
   const locked = state.busy || state.settingsBusy || update?.operationBusy || update?.sourceChecking || ['checking','downloading','installing','downloaded'].includes(update?.state);
   $('#update-repository').disabled = Boolean(locked);
+  $('#update-beta').checked = update?.beta === true; $('#update-beta').disabled = Boolean(locked);
+  $('#update-releases').replaceChildren(...(update?.releases ?? []).map(r => { const line = document.createElement('li'); line.textContent = r.version + (r.prerelease ? ' · Pre-Release' : ' · Release') + (r.downloadable ? '' : ' · keine Windows-Updatedateien'); return line; }));
   $('#update-source-save').disabled = Boolean(locked);
   $('#update-source-save').textContent = update?.sourceChecking ? 'Repository wird geprüft …' : 'Prüfen & speichern';
   $('#update-source-reset').disabled = Boolean(locked || !changed);
@@ -149,12 +162,17 @@ $('#chat-form').addEventListener('submit', async event => {
   input.value = ''; state.busy = true; updateSend();
   let sendError = '';
   try {
-    const imageOptions = $('#image-options').hidden ? undefined : { negativePrompt: $('#image-negative').value, width: Number($('#image-width').value), height: Number($('#image-height').value), steps: Number($('#image-steps').value), seed: Number($('#image-seed').value) };
+    const imageOptions = $('#image-options').hidden ? undefined : Object.fromEntries([...$('#image-fields').querySelectorAll('input')].map(c => [c.dataset.field, c.type === 'number' ? Number(c.value) : c.value]));
     const result = await api.send(text, draftAttachments.map(a => a.id), imageOptions);
     if (result.ok || result.submitted) { draftAttachments = []; renderAttachments(); }
     if (!result.ok) { sendError = result.error; if (!input.value) input.value = text; }
   } catch { sendError = 'Die Nachricht konnte nicht gesendet werden.'; if (!input.value) input.value = text; }
   finally { render(await api.state()); if (sendError) error(sendError); input.focus(); }
+});
+$('#delete-chat').addEventListener('click', () => { $('#chat-delete-dialog').showModal(); });
+$('#chat-delete-cancel').addEventListener('click', () => $('#chat-delete-dialog').close());
+$('#chat-delete-confirm').addEventListener('click', async () => {
+  const result = await api.deleteChat(state.activeId); if (result.ok) { input.value = ''; $('#chat-delete-dialog').close(); } else error(result.error);
 });
 $('#new-chat').addEventListener('click', async () => {
   try { const result = await api.newChat(); if (result.ok) { input.value = ''; updateSend(); input.focus(); } else error(result.error); }
@@ -182,7 +200,7 @@ function renderSettings() {
   $('#delete-confirm-yes').disabled = locked;
   $('#server-form').querySelectorAll('input,button,select').forEach(field => { field.disabled = locked; });
   $('#profile-form').querySelectorAll('input,button,select').forEach(field => { field.disabled = locked || field.id === 'probe-server' && probing; });
-  $('#workflow-form').querySelectorAll('input,button,select').forEach(field => { field.disabled = locked; });
+  $('#workflow-form').querySelectorAll('input,button,select').forEach(field => { field.disabled = locked || field.id.startsWith('limit-') && !$(`#mapping-${field.id.split('-')[1]}`)?.value; });
   const cards = state.settings.profiles.map(profile => {
     const card = document.createElement('article'); card.className = `profile-card${profile.enabled ? '' : ' disabled'}`;
     const head = document.createElement('div'); head.className = 'profile-card-head';
@@ -212,7 +230,7 @@ function renderSettings() {
     test.addEventListener('click', async () => {
       test.disabled = true;
       const result = await settingsAction(() => api.probeServer({ id: profile.id }));
-      if (result.ok) settingsFeedback(result.models.includes(profile.model) ? `${profile.name} ist erreichbar; das Modell ist vorhanden.` : `Server erreichbar, aber ${profile.model} wurde nicht gefunden.`, result.models.includes(profile.model));
+      if (result.ok) settingsFeedback((profile.type === 'comfyui' || result.models.includes(profile.model)) ? `${profile.name} ist erreichbar; das Modell ist vorhanden.` : `Server erreichbar, aber ${profile.model} wurde nicht gefunden.`, (profile.type === 'comfyui' || result.models.includes(profile.model)));
       test.disabled = false;
     });
     const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'profile-remove secondary-button danger-button'; remove.dataset.profile = profile.id; remove.textContent = 'Entfernen'; remove.disabled = locked;
@@ -220,9 +238,11 @@ function renderSettings() {
     if (profile.type === 'comfyui') {
       const workflow = document.createElement('button'); workflow.type = 'button'; workflow.className = 'secondary-button'; workflow.textContent = 'API-Workflow importieren'; workflow.disabled = locked;
       workflow.addEventListener('click', async () => { const result = await settingsAction(() => api.importWorkflow(profile.id)); if (result.ok && !result.cancelled) { render(await api.state()); editWorkflow(profile); } });
-      actions.append(workflow);
+      const duplicate = document.createElement('button'); duplicate.type = 'button'; duplicate.className = 'secondary-button'; duplicate.textContent = 'Weiteres Bild-Profil'; duplicate.disabled = locked;
+      duplicate.addEventListener('click', () => settingsAction(() => api.duplicateWorkflowProfile(profile.id)));
+      actions.append(workflow, duplicate);
       const note = document.createElement('p'); note.className = 'settings-hint';
-      const imported = state.workflows?.[profile.baseUrl];
+      const imported = state.workflows?.[profile.id];
       note.textContent = `ComfyUI-Bild-Backend · ${profile.serverInfo?.ggufAvailable ? 'GGUF-Knoten erkannt' : 'GGUF-Knoten nicht gemeldet'} · ${profile.serverInfo?.modelFiles?.length ?? 0} Modelldateien gemeldet. ${imported ? `Workflow: ${imported.name} (${imported.nodeCount} Knoten). ${imported.ready ? 'Zuordnung gespeichert.' : 'Bitte Eingänge zuordnen.'}` : 'Noch kein API-Workflow importiert.'}`;
       const configure = document.createElement('button'); configure.type = 'button'; configure.className = 'secondary-button workflow-configure'; configure.dataset.profile = profile.id; configure.textContent = 'Workflow zuordnen'; configure.disabled = locked || !imported; configure.addEventListener('click', () => editWorkflow(profile)); actions.append(configure);
       details.append(note); test.disabled = locked;
@@ -253,16 +273,27 @@ function confirmDeletion(profile, wholeServer) {
   renderSettings(); $('#delete-confirm').scrollIntoView({ block: 'nearest' }); $('#delete-confirm-cancel').focus();
 }
 function editWorkflow(profile) {
-  const workflow = state.workflows?.[profile.baseUrl]; if (!workflow) return;
+  const workflow = state.workflows?.[profile.id]; if (!workflow) return;
   $('#workflow-profile').value = profile.id; $('#workflow-name').textContent = workflow.name;
   const rows = Object.entries(comfyFields).map(([field, name]) => {
     const label = document.createElement('label'); label.textContent = name; label.htmlFor = `mapping-${field}`;
-    const select = document.createElement('select'); select.id = `mapping-${field}`; select.required = field !== 'negativePrompt';
-    const empty = document.createElement('option'); empty.value = ''; empty.textContent = field === 'negativePrompt' ? 'Nicht vorhanden · nur leerer Negative Prompt möglich' : 'Eingang auswählen …'; select.append(empty);
+    const select = document.createElement('select'); select.id = `mapping-${field}`; select.required = field === 'prompt';
+    const empty = document.createElement('option'); empty.value = ''; empty.textContent = field === 'prompt' ? 'Eingang auswählen …' : 'Nicht unterstützt / nicht anzeigen'; select.append(empty);
     for (const target of workflow.editableInputs.filter(t => t.type === (['prompt','negativePrompt'].includes(field) ? 'string' : 'number'))) {
       const option = document.createElement('option'); option.value = JSON.stringify({ nodeId: target.nodeId, input: target.input }); option.textContent = target.label; select.append(option);
     }
-    select.value = workflow.mapping?.[field] ? JSON.stringify(workflow.mapping[field]) : ''; const row = document.createElement('div'); row.append(label, select); return row;
+    select.value = workflow.mapping?.[field] ? JSON.stringify(workflow.mapping[field]) : ''; const row = document.createElement('div'); row.append(label, select);
+    if (!['prompt','negativePrompt'].includes(field)) {
+      const limit = workflow.limits[field];
+      for (const [key, caption] of Object.entries({ default: 'Standard', min: 'Minimum', max: 'Maximum', step: 'Schrittmaß' })) {
+        const wrapper = document.createElement('label'); wrapper.textContent = caption;
+        const control = document.createElement('input'); control.type = 'number'; control.step = 'any'; control.id = 'limit-' + field + '-' + key;
+        control.value = key === 'default' ? workflow.options[field] ?? {width:1024,height:1024,steps:20,seed:-1,cfg:7}[field] : limit[key];
+        control.disabled = !select.value; wrapper.append(control); row.append(wrapper);
+      }
+      select.addEventListener('change', () => row.querySelectorAll('input').forEach(c => { c.disabled = !select.value; }));
+    }
+    return row;
   });
   $('#workflow-mappings').replaceChildren(...rows); const empty = document.createElement('option'); empty.value = ''; empty.textContent = 'Ausgabe auswählen …'; $('#workflow-output').replaceChildren(empty);
   for (const node of workflow.outputNodes) { const option = document.createElement('option'); option.value = node.id; option.textContent = node.label; $('#workflow-output').append(option); }
@@ -272,7 +303,9 @@ $('#workflow-form-close').addEventListener('click', () => { $('#workflow-form').
 $('#workflow-form').addEventListener('submit', async event => {
   event.preventDefault(); const id = $('#workflow-profile').value; const profile = state.settings.profiles.find(p => p.id === id); if (!profile) return;
   const mapping = Object.fromEntries(Object.keys(comfyFields).map(field => [field, $(`#mapping-${field}`).value ? JSON.parse($(`#mapping-${field}`).value) : null])); mapping.outputNode = $('#workflow-output').value;
-  const result = await settingsAction(() => api.configureWorkflow(id, mapping, state.workflows[profile.baseUrl].options));
+  const options = { negativePrompt: '' }; const limits = {};
+  for (const field of ['width','height','steps','seed','cfg']) if (mapping[field]) { options[field] = Number($(`#limit-${field}-default`).value); limits[field] = Object.fromEntries(['min','max','step'].map(k => [k, Number($(`#limit-${field}-${k}`).value)])); }
+  const result = await settingsAction(() => api.configureWorkflow(id, mapping, options, limits));
   if (result.ok) { $('#workflow-form').hidden = true; imageProfile = undefined; render(await api.state()); }
 });
 $('#delete-confirm-cancel').addEventListener('click', () => { deletion = undefined; renderSettings(); });
@@ -292,6 +325,7 @@ function editProfile(profile) {
   $('#profile-model').value = profile?.model ?? '';
   $('#profile-enabled').checked = profile?.enabled ?? true;
   $('#profile-http').checked = profile?.allowHttp ?? false;
+  $('#profile-files').checked = profile?.uploads?.files ?? true; $('#profile-photos').checked = profile?.uploads?.photos ?? true;
   $('#profile-temperature').value = profile?.options?.temperature ?? 0.7;
   $('#profile-context').value = profile?.options?.num_ctx ?? 8192;
   $('#profile-context').max = Math.min(profile?.contextLimit ?? 32768, 32768);
@@ -344,6 +378,7 @@ $('#update-source-form').addEventListener('submit', async event => {
   } catch { $('#update-source-feedback').textContent = 'Repository konnte nicht gespeichert werden.'; }
   renderUpdates();
 });
+$('#update-beta').addEventListener('change', () => settingsAction(() => api.setBetaUpdates($('#update-beta').checked), 'Updatekanal gespeichert. Bitte erneut prüfen.'));
 $('#update-check').addEventListener('click', () => settingsAction(() => api.checkUpdates()));
 $('#update-download').addEventListener('click', () => settingsAction(() => api.downloadUpdate()));
 $('#update-install').addEventListener('click', () => settingsAction(() => api.installUpdate()));
@@ -396,7 +431,7 @@ $('#profile-form').addEventListener('submit', async event => {
     id: $('#profile-id').value || undefined, name: $('#profile-name').value,
     type: $('#profile-type').value,
     baseUrl: $('#profile-url').value, model: $('#profile-model').value, enabled: $('#profile-enabled').checked,
-    allowHttp: $('#profile-http').checked, options: { temperature: Number($('#profile-temperature').value), num_ctx: Number($('#profile-context').value), num_predict: Number($('#profile-output').value) },
+    uploads: { files: $('#profile-files').checked, photos: $('#profile-photos').checked }, allowHttp: $('#profile-http').checked, options: { temperature: Number($('#profile-temperature').value), num_ctx: Number($('#profile-context').value), num_predict: Number($('#profile-output').value) },
   }), 'Verbindung gespeichert.');
   if (result.ok) $('#profile-form').hidden = true;
 });

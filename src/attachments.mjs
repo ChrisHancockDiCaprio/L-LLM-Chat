@@ -1,5 +1,5 @@
-import { readFile, stat } from 'node:fs/promises';
-import { basename, extname } from 'node:path';
+import { readFile, stat, readdir, unlink } from 'node:fs/promises';
+import { basename, extname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { SecureFile } from './secure-file.mjs';
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -50,8 +50,15 @@ export class AttachmentStore {
       this.items.set(id, item);
     }
   }
+  async collectUnused(messages, drafts = new Set()) {
+    const used = new Set([...messages.flatMap(m => m.attachmentIds ?? []), ...drafts]);
+    for (const name of await readdir(this.directory)) {
+      const match = /^attachment-([a-f0-9-]{36})\.vault$/.exec(name);
+      if (match && !used.has(match[1])) { await unlink(join(this.directory, name)); this.items.delete(match[1]); }
+    }
+  }
   wireMessage(message, profile) {
-    const items = (message.attachmentIds ?? []).map(id => this.get(id));
+    const items = (message.attachmentIds ?? []).map(id => this.get(id)).filter(item => item.kind === 'image' ? profile.uploads?.photos !== false : profile.uploads?.files !== false);
     const images = items.filter(a => a.kind === 'image');
     const content = message.content + items.filter(a => a.kind === 'text').map(a => `\n\nAngehängte Datei ${JSON.stringify(a.name)}:\n${a.text}`).join('');
     return { role: message.role, content, ...(images.length ? { images: images.map(a => a.base64) } : {}) };

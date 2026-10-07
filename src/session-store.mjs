@@ -37,6 +37,13 @@ export class SessionStore {
     const session = freshSession(); this.db.sessions.unshift(session); this.db.activeId = session.id;
     await this.save(); return session;
   }
+  async remove(id) {
+    if (typeof id !== 'string' || !this.db.sessions.some(s => s.id === id)) throw new Error('Gespräch nicht gefunden.');
+    const previous = this.db; const sessions = this.db.sessions.filter(s => s.id !== id);
+    if (!sessions.length) sessions.push(freshSession());
+    this.db = { ...previous, sessions, activeId: previous.activeId === id ? sessions[0].id : previous.activeId };
+    try { await this.save(); } catch (error) { this.db = previous; throw error; }
+  }
   async select(id) {
     if (!this.db.sessions.some(s => s.id === id)) throw new Error('Gespräch nicht gefunden.');
     this.db.activeId = id; await this.save();

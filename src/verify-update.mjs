@@ -64,13 +64,13 @@ export async function verifyUpdate({ root, dataDir, window, store, settings, cre
     report.comfyConnectionPrepared = comfy.serverInfo.ggufAvailable;
     const graph = { '1': { class_type: 'CLIPTextEncode', inputs: { text: 'WORKFLOW-UI-PRIVATE' } }, '2': { class_type: 'CLIPTextEncode', inputs: { text: '' } }, '3': { class_type: 'EmptyLatentImage', inputs: { width: 1024, height: 1024 } }, '4': { class_type: 'KSampler', inputs: { steps: 20, seed: 1, positive: ['1', 0] } }, '5': { class_type: 'SaveImage', inputs: { images: ['4', 0] } } };
     assert.equal((await run(`window.qwenChat.toggleProfile(${JSON.stringify(comfy.id)}, true)`)).ok, false);
-    await workflows.import(comfy.baseUrl, 'api-workflow.json', graph); publish();
+    await workflows.import(comfy, 'api-workflow.json', graph); publish();
     report.workflowSummaryVisible = await run(`document.querySelector('#profile-list').textContent.includes('api-workflow.json') && !document.querySelector('#profile-list').textContent.includes('WORKFLOW-UI-PRIVATE')`); assert.ok(report.workflowSummaryVisible);
     const mapping = { prompt: { nodeId: '1', input: 'text' }, negativePrompt: { nodeId: '2', input: 'text' }, width: { nodeId: '3', input: 'width' }, height: { nodeId: '3', input: 'height' }, steps: { nodeId: '4', input: 'steps' }, seed: { nodeId: '4', input: 'seed' }, outputNode: '5' };
     await run(`document.querySelector('.workflow-configure').click();`);
     for (const [field, target] of Object.entries(mapping)) await run(`document.querySelector(${JSON.stringify(field === 'outputNode' ? '#workflow-output' : '#mapping-' + field)}).value = ${JSON.stringify(field === 'outputNode' ? target : JSON.stringify(target))}`);
     await run(`document.querySelector('#workflow-form').requestSubmit()`);
-    await until(() => !snapshot().settingsBusy && workflows.summary(comfy.baseUrl).ready);
+    await until(() => !snapshot().settingsBusy && workflows.summary(comfy).ready);
     report.workflowMappingSaved = true;
     assert.equal((await run(`window.qwenChat.toggleProfile(${JSON.stringify(comfy.id)}, true)`)).ok, true);
     assert.equal((await run(`window.qwenChat.selectProfile(${JSON.stringify(comfy.id)})`)).ok, true);
@@ -94,6 +94,22 @@ export async function verifyUpdate({ root, dataDir, window, store, settings, cre
     await restoredSettings.load(); await restoredCredentials.load(); await restoredHistory.load();
     report.encryptedRestartPreservesChangesAndChats = restoredSettings.db.profiles[0].type === 'comfyui' && !Object.keys(restoredCredentials.db.entries).length && restoredHistory.active.messages[0].content === 'UPDATE-UI-HISTORY' && restoredSettings.db.updateRepository === 'https://github.com/FixtureOwner/FixtureUpdates'; assert.ok(report.encryptedRestartPreservesChangesAndChats);
     const generated = restoredHistory.active.messages.find(m => m.attachmentIds?.length); assert.ok(generated); assert.ok(attachments.get(generated.attachmentIds[0]));
+    const clone = await run('window.qwenChat.duplicateWorkflowProfile(' + JSON.stringify(comfy.id) + ')'); assert.ok(clone.ok);
+    const alternative = settings.db.profiles.find(p => p.id === clone.id);
+    const optionalGraph = { '71': { class_type: 'Text', inputs: { text: 'EXAMPLE-ONLY' } }, '72': { class_type: 'Sampler', inputs: { cfg: 6 } }, '73': { class_type: 'SaveImage', inputs: { images: ['72', 0] } } };
+    await workflows.import(alternative, 'alternative.json', optionalGraph);
+    await workflows.configure(alternative, { prompt: { nodeId: '71', input: 'text' }, cfg: { nodeId: '72', input: 'cfg' }, outputNode: '73' }, { cfg: 6 }); publish();
+    await run('window.qwenChat.toggleProfile(' + JSON.stringify(alternative.id) + ', true)');
+    await run('window.qwenChat.selectProfile(' + JSON.stringify(alternative.id) + ')');
+    await until(async () => await run("Boolean(document.querySelector('#image-cfg'))"));
+    assert.equal(await run("Boolean(document.querySelector('#image-width'))"), false); report.onlyConfiguredImageFieldsShown = true;
+    assert.equal(workflows.get(comfy).mapping.seed.nodeId, '4'); report.independentWorkflowProfiles = true;
+    await run('window.qwenChat.saveProfile(' + JSON.stringify({id:alternative.id,uploads:{files:false,photos:false}}) + ')');
+    assert.equal(await run("document.querySelector('#attach-file').disabled"), true); report.uploadSettingsSaved = true;
+    assert.equal((await run('window.qwenChat.setBetaUpdates(true)')).ok, true); assert.equal(settings.db.betaUpdates, true); report.betaPersists = true;
+    const deletedId = store.active.id; await run("document.querySelector('#settings-dialog').close(); document.querySelector('#delete-chat').click(); document.querySelector('#chat-delete-confirm').click()");
+    await until(() => !store.db.sessions.some(s => s.id === deletedId)); report.chatDeletionViaUI = true;
+    assert.equal(await run('document.title'), 'KAIROS');
     await writeFile(join(root, 'verification-update.json'), JSON.stringify(report, null, 2)); return report;
   } finally { globalThis.fetch = previousFetch; dialog.showSaveDialog = previousSaveDialog; }
 }

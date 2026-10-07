@@ -9,7 +9,7 @@ module.exports = async function(projectFile) {
   if (!xml.includes(packageTag) || !xml.includes(scopeTag)) throw new Error('Unexpected MSI template; stop rather than change installation scope.');
   xml = xml.replace(packageTag, '<Package Compressed="yes" InstallerVersion="500" InstallScope="perUser"/>');
   xml = xml.replace(scopeTag, '');
-  const fixedFolder = '\n    <SetDirectory Id="APPLICATIONFOLDER" Value="[LocalAppDataFolder]Programs\\Qwen Chat MSI\\" Sequence="both"/>\n    <Condition Message="This installer is for the current Windows account only."><![CDATA[NOT ALLUSERS]]></Condition>\n';
+  const fixedFolder = '\n    <SetDirectory Id="APPLICATIONFOLDER" Value="[LocalAppDataFolder]Programs\\KAIROS MSI\\" Sequence="both"/>\n    <Condition Message="This installer is for the current Windows account only."><![CDATA[NOT ALLUSERS]]></Condition>\n';
   xml = xml.replace('<Property Id="WIXUI_INSTALLDIR"', fixedFolder + '    <Property Id="WIXUI_INSTALLDIR"');
   await fs.writeFile(projectFile, xml);
   const output = path.dirname(path.dirname(projectFile)); await fs.mkdir(output, { recursive: true });

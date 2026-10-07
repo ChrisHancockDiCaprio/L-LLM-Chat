@@ -21,6 +21,8 @@ jobs:
       - run: node node_modules/electron/install.js
       - run: npm test
       - run: npm run dist
+      - name: Keep Windows update metadata available for every release channel
+        run: node -e "const fs=require('fs'),p=require('./package.json'),s=require('semver');const f=(s.prerelease(p.version)?.[0]||'latest')+'.yml';if(!fs.existsSync('dist-release/latest.yml'))fs.copyFileSync('dist-release/'+f,'dist-release/latest.yml')"
       - run: node scripts/check-package.mjs
       - run: npm run dist:msi -- --prepackaged dist-release/win-unpacked
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -32,7 +34,7 @@ jobs:
             dist-release/latest.yml
             dist-msi-release/*.msi
           if-no-files-found: error
-  release-draft:
+  release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: windows-latest
@@ -40,7 +42,7 @@ jobs:
       contents: write
       actions: read
     steps:
-      - name: Create draft release with tested artifacts
+      - name: Publish release with tested artifacts
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -55,6 +57,10 @@ jobs:
           }
           gh run download $env:RUN_ID --name qwen-chat-windows --dir release-assets
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $assets = @(Get-ChildItem release-assets -File | ForEach-Object { $_.FullName })
-          gh release create $env:RELEASE_TAG @assets --draft --verify-tag --title "Qwen Chat $env:RELEASE_TAG" --notes "Windows-Pilotversion. Installation über bestehende Installation erhält den externen verschlüsselten Tresor. Noch nicht mit einem Windows-Herausgeberzertifikat signiert."
+          $assets = @(Get-ChildItem release-assets -Recurse -File | ForEach-Object { $_.FullName })
+          gh api "repos/$env:GH_REPO/contents/release/notes.md?ref=$env:RELEASE_TAG" --header "Accept: application/vnd.github.raw+json" > release-notes.md
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $releaseFlags = @()
+          if ($env:RELEASE_TAG.Contains('-')) { $releaseFlags += '--prerelease' }
+          gh release create $env:RELEASE_TAG @assets @releaseFlags --verify-tag --title "KAIROS $env:RELEASE_TAG" --notes-file release-notes.md
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('qwenChat', {
   attach: () => ipcRenderer.invoke('attachments:add'),
   removeAttachment: id => ipcRenderer.invoke('attachments:remove', id),
   cancel: () => ipcRenderer.invoke('chat:cancel'),
+  deleteChat: id => ipcRenderer.invoke('chat:delete', id),
+  setBetaUpdates: enabled => ipcRenderer.invoke('updates:beta', enabled),
+  duplicateWorkflowProfile: id => ipcRenderer.invoke('settings:workflow-duplicate', id),
   newChat: () => ipcRenderer.invoke('chat:new'),
   select: id => ipcRenderer.invoke('chat:select', id),
   saveProfile: profile => ipcRenderer.invoke('settings:save', profile),
@@ -21,7 +24,7 @@ contextBridge.exposeInMainWorld('qwenChat', {
   refreshServer: id => ipcRenderer.invoke('settings:refresh', id),
   removeProfile: (id, wholeServer = false) => ipcRenderer.invoke('settings:remove', id, wholeServer),
   importWorkflow: id => ipcRenderer.invoke('settings:workflow', id),
-  configureWorkflow: (id, mapping, options) => ipcRenderer.invoke('settings:workflow-config', id, mapping, options),
+  configureWorkflow: (id, mapping, options, limits) => ipcRenderer.invoke('settings:workflow-config', id, mapping, options, limits),
   onState: handler => {
     const listener = (_event, state) => handler(state);
     ipcRenderer.on('chat:update', listener);

@@ -1,5 +1,11 @@
 # Änderungen
 
+## 0.3.0 – KAIROS
+
+Austauschbare verschlüsselte Workflow-Profile, optionale CFG- und Bildparameter mit Profilgrenzen, Upload-Freigaben je Modell, Chat-Löschen und Beta-Updates. Gemeinsamer Verlauf beim Modellwechsel. 72 Tests und isolierter Electron-Fenstertest bestanden. Details: release/notes-0.3.0.md und WORKFLOW-PROFILE.md.
+
+# Änderungen
+
 ## 0.2.2 · 7. Oktober 2026
 
 - Zusätzlich echtes Windows-x64-MSI-Paket für den Pre-Release, fester Programmordner für das aktuelle Konto und externer Tresor. MSI-Updates verwenden einen stabilen Upgrade-Code; ein Wechsel vom EXE-Setup erfolgt manuell. Das Paket ist weiterhin unsigniert.

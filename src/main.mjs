@@ -32,7 +32,7 @@ app.setAppUserModelId(APP_ID);
 mkdirSync(appDataDir, { recursive: true });
 app.setPath('userData', appDataDir);
 app.commandLine.appendSwitch('disk-cache-size', '0');
-app.setName('Qwen Chat');
+app.setName('KAIROS');
 if (!app.requestSingleInstanceLock()) { app.quit(); }
 else {
   let window; let controller; let busy = false; let checking; let settingsBusy = false; let checkEpoch = 0;
@@ -41,7 +41,7 @@ else {
   let cipher; let store; let settings; let credentials; let workflows; let updates; let attachments; let closing = false; let updating = false;
   const drafts = new Set();
   const profileHealth = {};
-  const snapshot = () => ({ ...store.db, sessions: store.db.sessions.map(s => ({...s, messages: s.messages.map(m => ({...m, attachments: (m.attachmentIds ?? []).map(id => attachments.preview(id)) }))})), settings: settings.snapshot(), workflows: Object.fromEntries(settings.db.profiles.filter(p => p.type === 'comfyui').map(p => [p.baseUrl, workflows.summary(p.baseUrl)])), profileHealth, settingsBusy, connection, busy, notice, omittedRounds, imageProgress, updates: updates?.snapshot(), security: { encrypted: true, vaultDirectory: dataDir } });
+  const snapshot = () => ({ ...store.db, sessions: store.db.sessions.map(s => ({...s, messages: s.messages.map(m => ({...m, attachments: (m.attachmentIds ?? []).map(id => attachments.preview(id)) }))})), settings: settings.snapshot(), workflows: Object.fromEntries(settings.db.profiles.filter(p => p.type === 'comfyui').map(p => [p.id, workflows.summary(p)])), profileHealth, settingsBusy, connection, busy, notice, omittedRounds, imageProgress, updates: updates?.snapshot(), security: { encrypted: true, vaultDirectory: dataDir } });
   const publish = () => { if (window && !window.isDestroyed()) window.webContents.send('chat:update', snapshot()); };
   const guard = event => {
     if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Ungültiger Fensteraufruf.');
@@ -58,7 +58,7 @@ else {
       let result;
       try {
         const models = await discoverModels(profile.baseUrl, { profile, auth: credentials.get(profile) });
-        result = models.includes(profile.model) ? { state: 'online', message: `Mit ${profile.name} verbunden${profile.baseUrl.startsWith('http:') ? ' · HTTP im Heimnetz' : ' · HTTPS'}` } : { state: 'offline', message: `${profile.model} fehlt auf dem Server` };
+        result = (profile.type === 'comfyui' || models.includes(profile.model)) ? { state: 'online', message: `Mit ${profile.name} verbunden${profile.baseUrl.startsWith('http:') ? ' · HTTP im Heimnetz' : ' · HTTPS'}` } : { state: 'offline', message: `${profile.model} fehlt auf dem Server` };
         if (epoch === checkEpoch) profileHealth[profile.id] = { ...result, models };
       } catch (error) { result = { state: 'offline', message: error.message }; }
       if (epoch === checkEpoch) { connection = result; profileHealth[profile.id] = { ...profileHealth[profile.id], ...result }; checking = undefined; publish(); }
@@ -95,7 +95,7 @@ else {
         if (models.length) await settings.importServer({ ...profile, name: profile.name.split(' · ')[0].slice(0, 30), models });
         added += settings.db.profiles.length - count;
         for (const p of settings.db.profiles.filter(p => p.baseUrl === profile.baseUrl && (p.type === profile.type || models.some(m => m.type === p.type)))) {
-          const available = models.some(m => m.name === p.model && (m.type ?? profile.type) === p.type);
+          const available = models.some(m => (p.type === 'comfyui' || m.name === p.model) && (m.type ?? profile.type) === p.type);
           profileHealth[p.id] = { state: available ? 'online' : 'offline', message: available ? 'Modell auf dem Server vorhanden' : 'Modell derzeit nicht in der Serverliste' };
         }
       } catch (error) {
@@ -114,8 +114,8 @@ else {
   store = new SessionStore(dataDir, cipher, { legacyDirectory, importLatestLegacy: process.argv.includes('--import-latest-legacy') });
   settings = new SettingsStore(dataDir, cipher, { legacyDirectory, legacyHttpAllowed: true });
   credentials = new CredentialStore(dataDir, cipher);
-  workflows = new WorkflowStore(dataDir, cipher); await workflows.load();
-  await credentials.load(); await store.load(); await settings.load();
+  workflows = new WorkflowStore(dataDir, cipher);
+  await credentials.load(); await store.load(); await settings.load(); await workflows.load(settings.db.profiles);
   const validateImage = item => {
     const image = nativeImage.createFromBuffer(Buffer.from(item.base64, 'base64')); const size = image.getSize();
     if (image.isEmpty() || size.width > 8192 || size.height > 8192 || size.width * size.height > 24_000_000) throw new Error('Das Bild ist beschädigt oder hat zu viele Bildpunkte.');
@@ -131,7 +131,7 @@ else {
   await protectLegacyBackups(legacyDirectory, dataDir, cipher);
   notice = [store.notice, settings.notice].filter(Boolean).join(' ');
   const source = settings.db.updateRepository ? githubSource(settings.db.updateRepository) : JSON.parse(readFileSync(join(root, 'release/update-source.json'), 'utf8'));
-  updates = new UpdateManager({ updater: updaterPackage.autoUpdater, packaged: app.isPackaged, source, version: app.getVersion(), notify: publish,
+  updates = new UpdateManager({ updater: updaterPackage.autoUpdater, packaged: app.isPackaged, source, version: app.getVersion(), beta: settings.db.betaUpdates, notify: publish,
     isBusy: () => busy || settingsBusy || updating,
     beforeInstall: async () => {
       updating = true;
@@ -152,7 +152,7 @@ else {
   Menu.setApplicationMenu(null);
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   window = new BrowserWindow({
-    title: 'Qwen Chat', width: 1140, height: 810, minWidth: 800, minHeight: 600,
+    title: 'KAIROS', width: 1140, height: 810, minWidth: 800, minHeight: 600,
     backgroundColor: '#f7f8f5', icon: join(root, 'assets/icon.png'), show: false, autoHideMenuBar: true,
     webPreferences: { preload: join(root, 'src/preload.cjs'), partition: 'qwen-chat-memory', contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: !verify },
   });
@@ -176,9 +176,12 @@ else {
   register('attachments:add', async () => {
     if (busy || settingsBusy || updating) return { ok: false, error: 'Bitte den laufenden Vorgang abschließen.' };
     if (drafts.size >= 20) return { ok: false, error: 'Bitte nicht benötigte Anhänge entfernen.' };
+    const profile = settings.active;
+    if (!profile || profile.type === 'comfyui' || !(profile.uploads.files || profile.uploads.photos)) return { ok: false, error: 'Uploads für dieses Modell sind deaktiviert.' };
     const selected = await dialog.showOpenDialog(window, { title: 'Bild oder Textdatei anhängen', properties: ['openFile'], filters: [{ name: 'Bilder und Textdateien', extensions: ['png','jpg','jpeg','webp','txt','md','csv','json','py','js','ts','log','html','css','xml','yaml','yml','toml','sql','ps1'] }] });
     if (selected.canceled) return { ok: true, cancelled: true };
-    try { const attachment = await attachments.importFile(selected.filePaths[0]); drafts.add(attachment.id); return { ok: true, attachment }; }
+    try { const attachment = await attachments.importFile(selected.filePaths[0]); if (!(attachment.kind === 'image' ? profile.uploads.photos : profile.uploads.files)) { attachments.items.delete(attachment.id); throw new Error('Diese Upload-Art ist für das Modell deaktiviert.'); }
+      drafts.add(attachment.id); return { ok: true, attachment }; }
     catch (error) { return { ok: false, error: error.message }; }
   });
   register('attachments:remove', id => { if (busy || updating) return { ok: false, error: 'Bitte die laufende Anfrage abschließen.' }; if (drafts.delete(id)) attachments.items.delete(id); return { ok: true }; });
@@ -187,11 +190,12 @@ else {
       if (!store.db.sessions.some(s => s.messages.some(m => m.attachmentIds?.includes(id)))) throw new Error('Dieses Bild gehört zu keiner gespeicherten Nachricht.');
       const image = attachments.get(id); if (image.kind !== 'image') throw new Error('Bitte ein Bild auswählen.');
       const extension = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' }[image.mime];
-      const selected = await dialog.showSaveDialog(window, { title: 'Bild speichern', defaultPath: `Qwen-Bild.${extension}`, filters: [{ name: 'Bild', extensions: [extension] }] });
+      const selected = await dialog.showSaveDialog(window, { title: 'Bild speichern', defaultPath: `KAIROS-Bild.${extension}`, filters: [{ name: 'Bild', extensions: [extension] }] });
       if (selected.canceled || !selected.filePath) return { ok: true, cancelled: true };
       await writeFile(selected.filePath, Buffer.from(image.base64, 'base64')); return { ok: true };
     } catch { return { ok: false, error: 'Das Bild konnte nicht gespeichert werden.' }; }
   });
+  register('updates:beta', value => changeSettings(() => updates.saveBeta(value, enabled => settings.setBetaUpdates(enabled))));
   register('updates:check', () => updates.check());
   register('updates:download', () => updates.download());
   register('updates:install', () => updates.install());
@@ -209,6 +213,10 @@ else {
     catch { return { notice: 'Verbindung entfernt. Ein ungenutzter Zugang konnte noch nicht aus dem verschlüsselten Tresor entfernt werden.' }; }
     return { removed: removed.length };
   }));
+  register('settings:workflow-duplicate', id => changeSettings(async () => {
+    const profile = await settings.duplicateImageProfile(id);
+    return { id: profile.id, notice: 'Eigenes Bild-Profil angelegt. Bitte Vorlage importieren und Modellnamen bearbeiten.' };
+  }));
   register('settings:workflow', id => changeSettings(async () => {
     const profile = settings.db.profiles.find(p => p.id === id && p.type === 'comfyui');
     if (!profile) throw new Error('Bitte eine ComfyUI-Verbindung auswählen.');
@@ -217,26 +225,26 @@ else {
     const file = selected.filePaths[0];
     if ((await stat(file)).size > 2 * 1024 * 1024) throw new Error('Der Workflow darf maximal 2 MB groß sein.');
     let raw; try { raw = JSON.parse(await readFile(file, 'utf8')); } catch { throw new Error('Bitte eine gültige JSON-Datei im API-Format auswählen.'); }
-    await workflows.import(profile.baseUrl, basename(file), raw);
-    for (const p of settings.db.profiles.filter(p => p.type === 'comfyui' && p.baseUrl === profile.baseUrl && p.enabled)) await settings.toggle(p.id, false);
+    await workflows.import(profile, basename(file), raw);
+    if (profile.enabled) await settings.toggle(profile.id, false);
     return { notice: 'API-Workflow verschlüsselt importiert. Bitte jetzt die editierbaren Eingänge und den Ausgabe-Node zuordnen.' };
   }));
-  register('settings:workflow-config', (id, mapping, options) => changeSettings(async () => {
+  register('settings:workflow-config', (id, mapping, options, limits) => changeSettings(async () => {
     const profile = settings.db.profiles.find(p => p.id === id && p.type === 'comfyui');
     if (!profile) throw new Error('ComfyUI-Verbindung nicht gefunden.');
-    await workflows.configure(profile.baseUrl, mapping, options);
+    await workflows.configure(profile, mapping, options, limits);
     return { notice: 'Workflow-Zuordnung verschlüsselt gespeichert. Du kannst das Bild-Backend jetzt aktivieren.' };
   }));
   register('settings:save', profile => changeSettings(async () => {
     const existing = settings.db.profiles.find(p => p.id === profile?.id);
     const candidate = { ...existing, ...profile };
-    if (candidate.type === 'comfyui' && candidate.enabled && !workflows.summary(normalizeOrigin(candidate.baseUrl))?.ready) throw new Error('Bitte zuerst den API-Workflow importieren und seine Eingänge zuordnen.');
+    if (candidate.type === 'comfyui' && candidate.enabled && !workflows.summary(candidate)?.ready) throw new Error('Bitte zuerst den API-Workflow importieren und seine Eingänge zuordnen.');
     const auth = existing && normalizeOrigin(candidate.baseUrl) === existing.baseUrl ? credentials.get(existing) : { type: 'none' };
     secureHeaders(candidate, auth); await settings.upsert(profile);
   }));
   register('settings:toggle', (id, enabled) => changeSettings(() => {
     const profile = settings.db.profiles.find(p => p.id === id);
-    if (enabled && profile?.type === 'comfyui' && !workflows.summary(profile.baseUrl)?.ready) throw new Error('Bitte zuerst den API-Workflow importieren und seine Eingänge zuordnen.');
+    if (enabled && profile?.type === 'comfyui' && !workflows.summary(profile)?.ready) throw new Error('Bitte zuerst den API-Workflow importieren und seine Eingänge zuordnen.');
     return settings.toggle(id, enabled);
   }));
   register('settings:select', id => changeSettings(() => settings.select(id)));
@@ -271,6 +279,13 @@ else {
     if (typeof id !== 'string') return { ok: false, error: 'Ungültiges Gespräch.' };
     await store.select(id); omittedRounds = 0; notice = ''; publish(); return { ok: true };
   });
+  register('chat:delete', async id => {
+    if (busy || settingsBusy || updating || closing) return { ok: false, error: 'Bitte den laufenden Vorgang abschließen.' };
+    try {
+      await store.remove(id); await attachments.collectUnused(store.db.sessions.flatMap(s => s.messages), drafts);
+      omittedRounds = 0; notice = ''; publish(); return { ok: true };
+    } catch { publish(); return { ok: false, error: 'Gespräch oder ungenutzte Anhänge konnten nicht vollständig entfernt werden.' }; }
+  });
   register('chat:cancel', () => { controller?.abort(); return { ok: true }; });
   register('chat:send', async (text, attachmentIds = [], imageOptions) => {
     if (busy || updating || closing) return { ok: false, error: 'Bitte den laufenden Vorgang abschließen.' };
@@ -282,9 +297,10 @@ else {
     if (!Array.isArray(attachmentIds) || attachmentIds.length > 4 || new Set(attachmentIds).size !== attachmentIds.length || attachmentIds.some(id => !drafts.has(id))) return { ok: false, error: 'Bitte gültige Anhänge auswählen (maximal vier).' };
     let context;
     try {
+      for (const id of attachmentIds) { const item = attachments.get(id); if (!(item.kind === 'image' ? profile.uploads.photos : profile.uploads.files)) throw new Error('Diese Upload-Art ist für das ausgewählte Modell deaktiviert.'); }
       if (profile.type === 'comfyui') {
         if (attachmentIds.length) throw new Error('Der ComfyUI-Workflow unterstützt derzeit Text-zu-Bild. Bitte die Anhänge entfernen.');
-        prepareComfyWorkflow(workflows.get(profile.baseUrl), text, imageOptions);
+        prepareComfyWorkflow(workflows.get(profile), text, imageOptions);
       } else if (profile.type === 'image-api') {
         if (attachmentIds.some(id => attachments.get(id).kind !== 'image')) throw new Error('Bildgeneratoren akzeptieren Bilder, keine Textdateien.');
       } else {
@@ -309,10 +325,10 @@ else {
       await store.save();
       let reply; let generatedIds;
       if (profile.type === 'comfyui') {
-        const result = await generateComfyImages(text, { signal: controller.signal, profile, auth: credentials.get(profile), entry: workflows.get(profile.baseUrl), options: imageOptions,
+        const result = await generateComfyImages(text, { signal: controller.signal, profile, auth: credentials.get(profile), entry: workflows.get(profile), options: imageOptions,
           onProgress: progress => { imageProgress = progress; publish(); } });
         for (const image of result.images) { validateImage(image); attachments.items.set(image.id, image); }
-        generatedIds = result.images.map(image => image.id); await attachments.persist(generatedIds); reply = `Hier ist dein Bild${generatedIds.length > 1 ? 'ergebnis' : ''}. Seed: ${result.seed}`;
+        generatedIds = result.images.map(image => image.id); await attachments.persist(generatedIds); reply = `Hier ist dein Bild${generatedIds.length > 1 ? 'ergebnis' : ''}.${result.seed === undefined ? '' : ' Seed: ' + result.seed}`;
       } else if (profile.type === 'image-api') {
         const image = await generateImage(text, { signal: controller.signal, profile, auth: credentials.get(profile), references: attachmentIds.map(id => attachments.get(id)) });
         validateImage(image); attachments.items.set(image.id, image); await attachments.persist([image.id]); generatedIds = [image.id]; reply = 'Hier ist dein Bild.';
@@ -345,5 +361,5 @@ else {
     } catch (error) { console.error(error); app.exit(1); }
   }
   }
-  void start().catch(error => { if (verify || releaseTestRoot) console.error(error); else dialog.showErrorBox('Qwen Chat · Tresor gesperrt', 'Der verschlüsselte Speicher konnte nicht sicher geöffnet werden. Vorhandene Daten bleiben erhalten. Es wird nichts im Klartext gespeichert.'); app.exit(1); });
+  void start().catch(error => { if (verify || releaseTestRoot) console.error(error); else dialog.showErrorBox('KAIROS · Tresor gesperrt', 'Der verschlüsselte Speicher konnte nicht sicher geöffnet werden. Vorhandene Daten bleiben erhalten. Es wird nichts im Klartext gespeichert.'); app.exit(1); });
 }

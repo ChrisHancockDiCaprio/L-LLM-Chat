@@ -104,8 +104,8 @@ test('ComfyUI checks native stats and object_info, inventories GGUF models and r
 test('API workflows are encrypted, validated, restored and removed only when their ComfyUI connection is deleted', async () => {
   const { directory } = await stores(); const workflows = new WorkflowStore(directory, testCipher); await workflows.load();
   assert.throws(() => validateWorkflow({ nodes: [] }), /API-Format/); assert.throws(() => validateWorkflow({ '1': { type: 'wrong' } }), /Ungültiger/);
-  await workflows.import(profile.baseUrl, 'qwen.json', graph); assert.equal((await readFile(workflows.storage.file)).includes(Buffer.from('PRIVATE-WORKFLOW-PROMPT')), false);
-  const restored = new WorkflowStore(directory, testCipher); await restored.load(); assert.equal(restored.summary(profile.baseUrl).nodeCount, 2);
-  await restored.collectUnused([{ ...profile, type: 'comfyui' }]); assert.ok(restored.summary(profile.baseUrl));
-  await restored.collectUnused([]); assert.equal(restored.summary(profile.baseUrl), null);
+  await workflows.import({...profile,id:"image-profile",type:"comfyui"}, 'qwen.json', graph); assert.equal((await readFile(workflows.storage.file)).includes(Buffer.from('PRIVATE-WORKFLOW-PROMPT')), false);
+  const restored = new WorkflowStore(directory, testCipher); await restored.load(); assert.equal(restored.summary({...profile,id:"image-profile",type:"comfyui"}).nodeCount, 2);
+  await restored.collectUnused([{ ...profile, id: "image-profile", type: 'comfyui' }]); assert.ok(restored.summary({...profile,id:"image-profile",type:"comfyui"}));
+  await restored.collectUnused([]); assert.equal(restored.summary({...profile,id:"image-profile",type:"comfyui"}), null);
 });

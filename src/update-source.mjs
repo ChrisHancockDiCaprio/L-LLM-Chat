@@ -1,3 +1,4 @@
+import semver from 'semver';
 import { readServerJson } from './openai-client.mjs';
 
 export function githubSource(value) {
@@ -39,4 +40,29 @@ export async function probeUpdateRepository(value) {
   const assets = release?.assets.map(a => a.name) ?? [];
   const ready = assets.includes('latest.yml') && assets.some(name => typeof name === 'string' && name.endsWith('.exe'));
   return { source: canonical, repository: repositoryUrl(canonical), ready, notice: !release ? 'Repository erreichbar. Noch kein stabiles Release veröffentlicht; Entwürfe stehen für Updates nicht bereit.' : ready ? 'Repository erreichbar. Windows-Update-Dateien vorhanden; mit „Auf Updates prüfen“ die Version prüfen.' : 'Repository erreichbar. Im neuesten Release fehlen Windows-Setup oder latest.yml.' };
+}
+
+// Read public releases rather than infer a channel from the tag's prerelease label.
+export async function newerReleases(source, version) {
+  const checked = githubSource(repositoryUrl(source));
+  if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0') throw new Error('TLS-Prüfung erforderlich.');
+  const base = 'https://api.github.com/repos/' + checked.owner + '/' + checked.repo;
+  const releases = []; const signal = AbortSignal.timeout(15000);
+  for (let page = 1; page <= 10; page++) {
+    const response = await fetch(base + '/releases?per_page=100&page=' + page, { headers: { Accept: 'application/vnd.github+json' }, redirect: 'error', signal });
+    if (!response.ok) { await response.body?.cancel(); throw new Error('GitHub-Veröffentlichungen konnten nicht gelesen werden.'); }
+    const entries = await readServerJson(response, 4 * 1024 * 1024);
+    if (!Array.isArray(entries)) throw new Error('Ungültige GitHub-Veröffentlichungen.');
+    for (const r of entries) {
+      const next = semver.valid(r.tag_name);
+      if (r.draft || !next || !semver.gt(next, version)) continue;
+      const names = (r.assets ?? []).map(a => a.name);
+      const channel = names.includes('latest.yml') ? 'latest' : String(semver.prerelease(next)?.[0] ?? 'latest');
+      releases.push({ channel, version: next, tag: r.tag_name, prerelease: r.prerelease === true,
+        downloadable: names.includes(channel + '.yml') && names.some(n => typeof n === 'string' && n.endsWith('.exe')),
+        url: repositoryUrl(checked) + '/releases/tag/' + encodeURIComponent(r.tag_name) });
+    }
+    if (entries.length < 100) return releases.sort((a,b) => semver.rcompare(a.version, b.version));
+  }
+  throw new Error('Zu viele Veröffentlichungen für eine vollständige Prüfung.');
 }

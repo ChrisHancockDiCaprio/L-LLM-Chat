@@ -14,6 +14,7 @@ export function validateProfile(raw) {
   if (typeof raw.name !== 'string' || !raw.name.trim() || raw.name.length > 60) throw new Error('Der Name muss zwischen 1 und 60 Zeichen lang sein.');
   if (typeof raw.model !== 'string' || !raw.model.trim() || raw.model.length > 200 || /\s|[\x00-\x1f]/.test(raw.model.trim())) throw new Error('Bitte einen gültigen Ollama-Modellnamen eingeben.');
   if (typeof raw.enabled !== 'boolean') throw new Error('Aktivierung muss ein Ja/Nein-Wert sein.');
+  if (raw.uploads && (typeof raw.uploads.files !== 'boolean' || typeof raw.uploads.photos !== 'boolean')) throw new Error('Ungültige Upload-Freigaben.');
   const options = raw.options ?? { num_ctx: 8192, num_predict: 2048, temperature: 0.7 };
   if (!Number.isInteger(options.num_ctx) || options.num_ctx < 512 || options.num_ctx > 32768 || !Number.isInteger(options.num_predict) || options.num_predict < 128 || options.num_predict > 8192 || !Number.isFinite(options.temperature) || options.temperature < 0 || options.temperature > 2) throw new Error('Ungültige Modelleinstellungen.');
   const contextLimit = Number.isInteger(raw.contextLimit) && raw.contextLimit > 0 ? raw.contextLimit : null;
@@ -24,6 +25,7 @@ export function validateProfile(raw) {
     id: raw.id, type: raw.type ?? 'ollama', name: raw.name.trim(), baseUrl: normalizeOrigin(raw.baseUrl), model: raw.model.trim(), enabled: raw.enabled,
     allowHttp: raw.allowHttp === true, authRef: raw.authRef ?? null,
     ...(raw.type === 'comfyui' ? { serverInfo: { modelFiles: Array.isArray(raw.serverInfo?.modelFiles) ? raw.serverInfo.modelFiles.filter(f => typeof f === 'string' && f.length <= 200 && !/[\x00-\x1f]/.test(f)).slice(0, 100) : [], ggufAvailable: raw.serverInfo?.ggufAvailable === true, nodeCount: Number.isInteger(raw.serverInfo?.nodeCount) ? raw.serverInfo.nodeCount : 0 } } : {}),
+    uploads: { files: raw.uploads?.files ?? true, photos: raw.uploads?.photos ?? true },
     authType: ['basic', 'bearer'].includes(raw.authType) ? raw.authType : 'none',
     options: { num_ctx: options.num_ctx, num_predict: options.num_predict, temperature: options.temperature },
     contextLimit, capabilities: Array.isArray(raw.capabilities) ? raw.capabilities.filter(x => typeof x === 'string' && x.length <= 40).slice(0, 15) : [],
@@ -37,7 +39,7 @@ function validateSettings(raw) {
   const excludedModels = raw.excludedModels ?? [];
   if (!Array.isArray(excludedModels) || excludedModels.length > 500 || excludedModels.some(p => !['ollama', 'openai-chat', 'image-api', 'comfyui'].includes(p?.type) || typeof p.model !== 'string' || !p.model || p.model.length > 200 || /\s|[\x00-\x1f]/.test(p.model))) throw new Error('Ungültige Liste entfernter Modelle.');
   const updateRepository = raw.updateRepository == null ? null : repositoryUrl(githubSource(raw.updateRepository));
-  return { version: 1, activeId: raw.activeId, profiles, updateRepository, excludedModels: excludedModels.map(p => ({ baseUrl: normalizeOrigin(p.baseUrl), type: p.type, model: p.model })) };
+  return { version: 1, activeId: raw.activeId, profiles, updateRepository, betaUpdates: raw.betaUpdates === true, excludedModels: excludedModels.map(p => ({ baseUrl: normalizeOrigin(p.baseUrl), type: p.type, model: p.model })) };
 }
 export class SettingsStore {
   constructor(directory, cipher, { legacyDirectory, legacyHttpAllowed = false } = {}) {
@@ -72,6 +74,16 @@ export class SettingsStore {
     if (next.activeId === profile.id && !profile.enabled) next.activeId = null;
     next.excludedModels = next.excludedModels.filter(p => !(p.baseUrl === profile.baseUrl && p.type === profile.type && p.model === profile.model));
     return this.commit(next);
+  }
+  async duplicateImageProfile(id) {
+    const existing = this.db.profiles.find(p => p.id === id && p.type === 'comfyui');
+    if (!existing || this.db.profiles.length >= 100) throw new Error('Bild-Profil nicht gefunden oder Profilgrenze erreicht.');
+    const profile = validateProfile({ ...existing, id: randomUUID(), name: (existing.name + ' · Kopie').slice(0, 60), model: 'workflow-' + randomUUID(), enabled: false });
+    await this.commit({ ...this.snapshot(), profiles: [...this.db.profiles, profile] }); return profile;
+  }
+  async setBetaUpdates(value) {
+    if (typeof value !== 'boolean') throw new Error('Ungültiger Updatekanal.');
+    return this.commit({ ...this.snapshot(), betaUpdates: value });
   }
   async setUpdateRepository(url) {
     return this.commit({ ...this.snapshot(), updateRepository: repositoryUrl(githubSource(url)) });
