@@ -7,7 +7,15 @@
 
 Der Tresor liegt fest unter `%LOCALAPPDATA%\QwenChat\Vault`, der Browserzustand unter `%LOCALAPPDATA%\QwenChat\App`. Ein frei wählbarer Tresorpfad ist in dieser Version nicht vorgesehen. Der Installer verhindert, dass der Programmordner mit dem Tresor oder dessen übergeordnetem Ordner überlappt. App-ID `sol.qwen-chat`, Datenordner und Dateiformate bleiben bei Updates stabil.
 
-## Aktualisieren und entfernen
+## MSI-Pre-Release 0.2.2
+
+Zusätzlich zum bisherigen EXE-Setup gibt es `Qwen-Chat-Setup-0.2.2-x64.msi` als echte Windows-Installer-Datei. Die MSI installiert für das aktuelle Benutzerkonto fest nach `%LOCALAPPDATA%\Programs\Qwen Chat MSI`. Sie startet die App nach der Installation nicht automatisch. Deinstallation erfolgt über Windows „Installierte Apps“. Der externe Tresor `%LOCALAPPDATA%\QwenChat\Vault` ist kein Bestandteil der MSI und bleibt erhalten.
+
+Die MSI ersetzt die bisherige NSIS-/EXE-Installation nicht automatisch. Für einen Wechsel zuerst die App mit abgeschlossenen Eingaben schließen, die bisherige EXE-Installation über Windows deinstallieren (Tresor bleibt erhalten), dann die MSI installieren. MSI-Updates ersetzen künftig frühere MSI-Versionen mit demselben Upgrade-Code. Der App-Updater verwendet weiterhin das EXE-Setup; er installiert keine MSI. Die MSI ist unsigniert und hebt die bekannte Windows-Anwendungssteuerungsblockade der Programmdatei nicht auf. Ein vollständiger MSI-Installations-/Deinstallationslauf ist noch nicht bestätigt.
+
+Für Entwickler: `npm run dist:msi` erzeugt die MSI unter `dist-msi-release`. Mit `-- --prepackaged dist-release/win-unpacked` wird eine bereits gebaute App verwendet. Der Build-Hook `scripts/msi-per-user.cjs` setzt einen festen Programmordner und verhindert eine Installation für alle Benutzer. MSI-Version, Upgrade-Code, Dateiliste und Ordneraktion werden vor Veröffentlichung lesend geprüft; kein Benutzer-Tresor wird dabei verändert. Die lokale WiX-ICE-Validierung wird von einer Windows-Systemrichtlinie blockiert. Sie wird nicht unterdrückt; der Build erfolgt mit vollständiger Validierung auf dem GitHub-Windows-Runner.
+
+## EXE-Updates und Deinstallation
 
 Ein neues Setup über die bestehende Installation installieren. Der Installer ersetzt die Programmdateien. Verlauf, Einstellungen, Zugänge und Anhänge liegen außerhalb davon und bleiben erhalten. Auch die Windows-Deinstallation entfernt den Tresor nicht. Zum endgültigen Entfernen persönlicher Daten muss der Benutzer den Tresor selbst entfernen; der Installer führt das nicht aus.
 
@@ -28,6 +36,7 @@ Die Update-Vorbereitung kann verschlüsselte Kopien aller erforderlichen Tresord
 - `npm ci`, danach bei Bedarf `node node_modules/electron/install.js`.
 - `npm test`: Netzwerk-, Verschlüsselungs-, Verlauf-, Anhang- und Updateprüfungen.
 - `npm run dist`: Windows-x64-Setup, Blockmap und `latest.yml` erstellen. Es wird nichts hochgeladen.
+- `npm run dist:msi`: zusätzliches Windows-x64-MSI-Paket erstellen. Es wird nichts hochgeladen.
 - `node scripts/check-package.mjs`: prüfen, dass der Installer keine Benutzertresore und keine Entwicklungslaufzeit enthält.
 - `.github/workflows/windows-release.yml`: reproduzierbarer Windows-Build und Prüfungen. Ein Tag `v<package-Version>` erstellt nach erfolgreichem Build einen GitHub-Release-Entwurf. Ein manueller Workflowlauf erzeugt herunterladbare Build-Artefakte. CI-Zugang nur über das kurzlebige GitHub-Token im Runner.
 - Ein Release benötigt Setup, passende `.blockmap` und `latest.yml` derselben Version. Den Entwurf erst nach Prüfung freigeben. Für öffentliche Updates muss die Quelle öffentlich abrufbar sein.

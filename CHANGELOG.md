@@ -2,6 +2,8 @@
 
 ## 0.2.2 · 7. Oktober 2026
 
+- Zusätzlich echtes Windows-x64-MSI-Paket für den Pre-Release, fester Programmordner für das aktuelle Konto und externer Tresor. MSI-Updates verwenden einen stabilen Upgrade-Code; ein Wechsel vom EXE-Setup erfolgt manuell. Das Paket ist weiterhin unsigniert.
+
 - Update-Repository in den Einstellungen frei wählbar; HTTPS-GitHub-Adresse prüfen und verschlüsselt speichern. Falsche/nicht öffentliche Quellen ändern die bestehende Quelle nicht.
 - Öffentliche Releases und fehlende Windows-Assets werden unterschieden. Updatevorgänge sperren den Quellenwechsel; ein Wechsel verwirft eine alte Updateauswahl und erfordert eine neue Versionsprüfung.
 - Getrenntes ComfyUI-Bild-Backend: API-Workflow importieren, Prompt, Negative Prompt, Breite, Höhe, Schritte und Seed direkten Node-Eingängen zuordnen; gespeicherten Bild-Ausgabe-Node wählen.

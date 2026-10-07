@@ -10,7 +10,8 @@
     "test": "node --test test/*.test.mjs",
     "verify": "electron . --verify",
     "verify:update": "electron . --verify-update",
-    "dist": "node --require ./scripts/nsis-static-uninstaller.cjs node_modules/electron-builder/cli.js --config electron-builder.config.cjs --publish never"
+    "dist": "node --require ./scripts/nsis-static-uninstaller.cjs node_modules/electron-builder/cli.js --config electron-builder.config.cjs --publish never",
+    "dist:msi": "node node_modules/electron-builder/cli.js --config electron-builder.msi.config.cjs --publish never"
   },
   "devDependencies": {
     "electron": "44.6.0",

@@ -22,6 +22,7 @@ jobs:
       - run: npm test
       - run: npm run dist
       - run: node scripts/check-package.mjs
+      - run: npm run dist:msi -- --prepackaged dist-release/win-unpacked
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: qwen-chat-windows
@@ -29,6 +30,7 @@ jobs:
             dist-release/*.exe
             dist-release/*.blockmap
             dist-release/latest.yml
+            dist-msi-release/*.msi
           if-no-files-found: error
   release-draft:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -46,6 +48,11 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
           RUN_ID: ${{ github.run_id }}
         run: |
+          gh release view $env:RELEASE_TAG --json isDraft > $null 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "A release already exists for this tag. Its files remain unchanged."
+            exit 0
+          }
           gh run download $env:RUN_ID --name qwen-chat-windows --dir release-assets
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $assets = @(Get-ChildItem release-assets -File | ForEach-Object { $_.FullName })
