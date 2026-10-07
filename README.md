@@ -1,15 +1,15 @@
 # Qwen Chat für Windows
 
-Für die Windows-Installation das Setup öffnen. Details: **INSTALLATION-UND-UPDATES.md**. Im Entwicklungsordner mit **Start-Qwen.cmd** öffnen. Die App verbindet sich mit der ausgewählten Ollama-KI und öffnet ein eigenes Chatfenster mit Historie.
+Für die Windows-Installation das Setup öffnen. Details: **INSTALLATION-UND-UPDATES.md**. Im Entwicklungsordner mit **Start-Qwen.cmd** öffnen. Die App verbindet sich mit der ausgewählten Ollama- oder OpenAI-kompatiblen Chat-KI und öffnet ein eigenes Chatfenster mit Historie. Änderungen in 0.2.1 und ComfyUI-Vorbereitung: **SERVER-UND-COMFYUI.md**.
 
 ## Server und Modelle
 
 1. Links unten **Einstellungen → Server & Modelle → ＋ Server** öffnen.
-2. Namen und Ollama-Adresse eingeben, ohne API-Pfad oder Zugangsdaten in der URL.
+2. Namen und Serveradresse eingeben, ohne API-Pfad oder Zugangsdaten in der URL. **Chatserver automatisch erkennen** liest Ollama und zusätzliche OpenAI-kompatible Modelllisten.
 3. Zugangsart wählen: ohne Zugangsdaten, API-Schlüssel (Bearer) oder Benutzername/Passwort (Basic). Zugänge benötigen HTTPS mit gültigem Zertifikat.
 4. **Server prüfen & Modelle hinzufügen** liest alle Modellnamen und verfügbare Zusatzinformationen automatisch. Es werden keine Modelle geladen, installiert oder generiert.
 5. Gewünschte Modelle aktivieren und **Im Chat nutzen** wählen. Neue Modelle bleiben zunächst deaktiviert. Bestehende Auswahl und Aktivierung werden beim Aktualisieren erhalten.
-6. **Modelle & Zugang aktualisieren** fragt einen vorhandenen Server erneut ab. Ein leeres Passwort-/Schlüsselfeld behält seinen gespeicherten Zugang für dieselbe Adresse und Zugangsart. Ein neuer Schlüssel ersetzt den bisherigen Zugang bei den neu abgefragten Modellen.
+6. **Modelle laden** / **Alle Server prüfen** aktualisiert die Listen. Dies geschieht auch beim Start. **Zugang bearbeiten** öffnet das Serverformular; ein leeres Passwort-/Schlüsselfeld behält einen vorhandenen Zugang für dieselbe Adresse und Zugangsart. Ein neuer Schlüssel ersetzt den bisherigen Zugang bei den neu abgefragten Modellen.
 7. **Bearbeiten** ändert die Parameter je Modell: Kreativität, Kontextfenster und Antwortlimit. Diese Werte gelten nur für Anfragen dieser App und ändern keine globalen Servereinstellungen. Die theoretische Modell-Kontextgrenze sagt nichts über den verfügbaren Server-RAM aus.
 
 Der Status zeigt HTTPS oder die ausdrücklich erlaubte HTTP-Heimnetz-Ausnahme. HTTP bleibt unverschlüsselt und wird nur ohne Zugangsdaten für private IP-Adressen/Loopback zugelassen. Für den bisherigen Server wurde diese Ausnahme auf Wunsch übernommen. Die App prüft keinen VPN-Tunnel; VPN-only-Erreichbarkeit wird auf dem Server und in der Firewall eingerichtet.
@@ -22,6 +22,7 @@ Ein Modellwechsel gilt für die nächste Nachricht. Der ausgewählte Gesprächsk
 - Während einer Antwort wird Senden zu Abbrechen. Antworten erscheinen vollständig nach Abschluss.
 - Frühere Gespräche bleiben links auswählbar. Gescheiterte oder abgebrochene Nachrichten bleiben markiert und werden nicht als Kontext übergeben.
 - Der Verbindungsstatus lässt sich zur erneuten Prüfung anklicken.
+- Klick außerhalb der Einstellungen schließt sie. **Entfernen** / **Server löschen** entfernt Verbindungen nach kurzer Bestätigung und bewahrt alle Gespräche. Entfernte Modelle werden beim automatischen Prüfen nicht neu angelegt.
 - Ohne aktivierte und ausgewählte KI wird nichts gesendet. Während einer Antwort oder Einstellungsänderung ist die Verbindungsbearbeitung gesperrt.
 - Die vollständige Historie bleibt gespeichert. Für eine Anfrage wird der neueste Teil innerhalb eines begrenzten Budgets ausgewählt; fehlende ältere Runden werden angezeigt. Das Bytebudget ist kein echter Tokenizer und wird für kleinere Kontextfenster reduziert.
 
@@ -32,6 +33,7 @@ Normale Benutzerdaten liegen außerhalb des Projekts unter **%LOCALAPPDATA%\\Qwe
 - settings.vault: Verbindungen, Modellparameter und Auswahl.
 - credentials.vault: getrennte API-Schlüssel und Benutzername/Passwort.
 - history.vault: Gespräche.
+- workflows.vault: importierte ComfyUI-API-Workflows, sofern vorhanden.
 
 Windows DPAPI über Electrons asynchrones safeStorage schützt die Dateien. Es gibt keinen Klartext-Ersatzspeicher. Alte data/history.json und data/settings.json werden beim Start automatisch übernommen; die Klartextquellen werden erst nach geprüfter verschlüsselter Speicherung entfernt. Auch alte Historie-/Einstellungen-Sicherungen werden verschlüsselt übernommen. Beschädigte Tresore bleiben erhalten und blockieren den Start.
 
@@ -41,7 +43,7 @@ Das vollständige Konzept einschließlich VPN, fremden Servern, Migration, Grenz
 
 ## LiteLLM
 
-Der LiteLLM-Reiter ist weiterhin eine deaktivierte Konzeptansicht. Keine Gateway-Anfragen und keine LiteLLM-Schlüsselablage. Bei der späteren Umsetzung werden der vorhandene Tresor und die HTTPS-Regeln wiederverwendet. Details: LITELLM-KONZEPT.md.
+Der LiteLLM-Reiter ist weiterhin eine deaktivierte Konzeptansicht. Unter **Server & Modelle** gibt es nun einen allgemeinen OpenAI-kompatiblen Gateway-Anschluss mit verschlüsseltem Zugang; eine besondere LiteLLM-Verwaltung ist noch nicht implementiert. Details: LITELLM-KONZEPT.md.
 
 ## Entwicklung und Prüfen
 
@@ -49,7 +51,8 @@ Der ursprüngliche Anfragebaustein src/ollama-request.mjs stammt aus dem geprüf
 
 Electron 44.6.0 ist lokal installiert. Die Oberfläche ist isoliert, hat keinen allgemeinen Dateisystem-/Shellzugriff und lädt keine externen Webinhalte. Ein eigener Windows-x64-Installer mit SoL-Icon ist erstellt; die Pilotversion ist noch nicht signiert. Updates und Datenablage: INSTALLATION-UND-UPDATES.md.
 
-- npm.cmd test: 45 automatisierte Prüfungen für Netzwerkanfragen, Verlauf, Verschlüsselung, Migration, HTTP-Sperren und Serververwaltung.
+- npm.cmd test: 56 automatisierte Prüfungen für Netzwerkanfragen, Verlauf, Verschlüsselung, Migration, HTTP-Sperren und Serververwaltung.
+- npm.cmd run verify:update: isolierter Electron-Fenstertest für 0.2.1 mit künstlichen Servern; Hintergrundklick, Löschbestätigung, neues Modell und verschlüsselter Neustart.
 - npm.cmd run verify: isolierter echter Electron-/Ollama-Test. Verwendet einen separaten verschlüsselten Testtresor; reale Benutzerchats werden nicht geöffnet oder verändert. Die bisherige isolierte Testkonfiguration wird bei ihrem ersten Lauf übernommen. Ohne Testserver-Konfiguration ist ein frisches Testprofil offline.
 - npm.cmd ci, danach node node_modules/electron/install.js: Abhängigkeiten und offizielle Electron-Laufzeit erneut einrichten.
 - In einer Codex-Umgebung gegebenenfalls ELECTRON_RUN_AS_NODE entfernen; Start-Qwen.cmd berücksichtigt dies bereits.

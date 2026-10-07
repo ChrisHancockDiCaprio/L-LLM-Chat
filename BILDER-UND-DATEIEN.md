@@ -10,9 +10,9 @@ Beim Senden werden die Originalanhänge separat als `attachment-<ID>.vault` mit 
 
 ## Qwen-Image-2.1-Uncensored-GGUF anbinden
 
-Die App stellt die Verbindung zu einer Laufzeit her; sie lädt keine GGUF-Dateien selbst. Die GGUF-Modellkarte nennt ComfyUI mit GGUF-Erweiterung und zusätzlich benötigtem Textencoder/VAE. Ein direktes ComfyUI-Workflow-API ist in dieser Version nicht eingebaut.
+Die App stellt die Verbindung zu einer Laufzeit her; sie lädt keine GGUF-Dateien selbst. Dein Qwen Image soll über ComfyUI auf `http://192.168.0.175:8188` laufen. In 0.2.1 ist eine eigene ComfyUI-Verbindungsprüfung mit GGUF-/Modelldatei-Erkennung und verschlüsseltem API-Workflow-Import vorbereitet. Der eigentliche Workflow-Bildlauf ist noch deaktiviert. Einrichtung und Prüfstatus: **SERVER-UND-COMFYUI.md**.
 
-Der flexible Anschluss nutzt die OpenAI-kompatiblen Bildendpunkte, wie sie beispielsweise `stable-diffusion.cpp` bereitstellt:
+Für andere Bildserver steht weiterhin ein getrennter Anschluss über OpenAI-kompatible Bildendpunkte zur Verfügung, wie sie beispielsweise `stable-diffusion.cpp` bereitstellt. Diese folgenden Schritte gelten nicht für ComfyUI:
 
 1. Qwen Image auf einem Bildserver installieren und dessen API bereitstellen. Das ist eine separate Einrichtung; es wird kein Modell automatisch heruntergeladen oder auf Ubuntu installiert.
 2. Einstellungen → Server → Verbindungsart **Bildgenerator · OpenAI-kompatibel / stable-diffusion.cpp** wählen.
@@ -26,6 +26,6 @@ Ohne Referenzbild verwendet die App `POST /v1/images/generations`, mit Referenzb
 
 Der echte Qwen-Textchat funktioniert. Der erreichbare Ollama-Server meldet für `qwen3.5:4b` zwar Vision, bricht aber bei Bildeingaben mit HTTP 500 / `unexpected EOF` ab. Das trat auch bei einer direkten Anfrage ohne App auf. Die Ursache auf Ubuntu ist noch offen.
 
-Bildtransport, Modellsperre, verschlüsselte Speicherung, Anzeige, Wiederherstellung, Generierung und Referenzbild-Anfragen wurden mit künstlichen API-Antworten geprüft. Das beweist die App-Anbindung, nicht eine erfolgreiche lokale Qwen-Image-Inferenz. Der Bildgenerator ist noch nicht auf dem Benutzer-Server eingerichtet.
+Bildtransport, Modellsperre, verschlüsselte Speicherung, Anzeige, Wiederherstellung, Generierung und Referenzbild-Anfragen wurden mit künstlichen API-Antworten geprüft. Das beweist die App-Anbindung, nicht eine erfolgreiche lokale Qwen-Image-Inferenz. Laut Benutzer sind ComfyUI und Modelldateien auf Ubuntu installiert; ein vollständiger, getesteter API-Workflow fehlt noch. Port 8188 war vom Windows-Rechner bei der Prüfung nicht erreichbar.
 
 Quellen: [Modellkarte](https://huggingface.co/0xSojalSec/Qwen-Image-2.1-Uncensored-GGUF), [stable-diffusion.cpp-Bild-API](https://github.com/leejet/stable-diffusion.cpp/blob/master/examples/server/api.md), [Ollama Chat-API](https://docs.ollama.com/api/chat).

@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld('qwenChat', {
   selectProfile: id => ipcRenderer.invoke('settings:select', id),
   probeServer: request => ipcRenderer.invoke('settings:probe', request),
   addServer: request => ipcRenderer.invoke('settings:server', request),
+  refreshServer: id => ipcRenderer.invoke('settings:refresh', id),
+  removeProfile: (id, wholeServer = false) => ipcRenderer.invoke('settings:remove', id, wholeServer),
+  importWorkflow: id => ipcRenderer.invoke('settings:workflow', id),
   onState: handler => {
     const listener = (_event, state) => handler(state);
     ipcRenderer.on('chat:update', listener);

@@ -1,8 +1,8 @@
 import { app, BrowserWindow, ipcMain, Menu, session, safeStorage, dialog, nativeImage } from 'electron';
-import { dirname, join } from 'node:path';
+import { dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, readFileSync, existsSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { writeFile, readFile, stat } from 'node:fs/promises';
 import updaterPackage from 'electron-updater';
 import { dataPaths, APP_ID } from './data-paths.mjs';
 import { UpdateManager } from './update-manager.mjs';
@@ -12,6 +12,8 @@ import { generateImage } from './image-client.mjs';
 import { randomUUID } from 'node:crypto';
 import { SessionStore, selectContext } from './session-store.mjs';
 import { sendChat } from './ollama-client.mjs';
+import { sendOpenaiChat } from './openai-client.mjs';
+import { WorkflowStore } from './workflow-store.mjs';
 import { SettingsStore, discoverModels, inspectServer, normalizeOrigin } from './settings-store.mjs';
 import { CredentialStore } from './credential-store.mjs';
 import { protectLegacyBackups } from './secure-file.mjs';
@@ -19,10 +21,11 @@ import { normalizeAuth, secureHeaders } from './connection-security.mjs';
 import { verifyApplication } from './verify-app.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const verify = process.argv.includes('--verify');
+const verifyUpdateOnly = process.argv.includes('--verify-update');
+const verify = process.argv.includes('--verify') || verifyUpdateOnly;
 const releaseTestRoot = process.argv.find(a => a.startsWith('--release-test-root='))?.slice('--release-test-root='.length);
 if (releaseTestRoot && !existsSync(join(releaseTestRoot, '.qwen-chat-test-root'))) throw new Error('Testordner ist nicht freigegeben.');
-const { dataDir, legacyDirectory, appDataDir } = dataPaths({ root, appData: app.getPath('appData'), verify, releaseTestRoot });
+const { dataDir, legacyDirectory, appDataDir } = dataPaths({ root, appData: app.getPath('appData'), verify, verifySuite: verifyUpdateOnly ? 'update' : undefined, releaseTestRoot });
 app.setAppUserModelId(APP_ID);
 mkdirSync(appDataDir, { recursive: true });
 app.setPath('userData', appDataDir);
@@ -33,10 +36,10 @@ else {
   let window; let controller; let busy = false; let checking; let settingsBusy = false; let checkEpoch = 0;
   let connection = { state: 'checking', message: 'Verbindung wird geprüft …' };
   let notice = ''; let omittedRounds = 0;
-  let cipher; let store; let settings; let credentials; let updates; let attachments; let closing = false; let updating = false;
+  let cipher; let store; let settings; let credentials; let workflows; let updates; let attachments; let closing = false; let updating = false;
   const drafts = new Set();
   const profileHealth = {};
-  const snapshot = () => ({ ...store.db, sessions: store.db.sessions.map(s => ({...s, messages: s.messages.map(m => ({...m, attachments: (m.attachmentIds ?? []).map(id => attachments.preview(id)) }))})), settings: settings.snapshot(), profileHealth, settingsBusy, connection, busy, notice, omittedRounds, updates: updates?.snapshot(), security: { encrypted: true, vaultDirectory: dataDir } });
+  const snapshot = () => ({ ...store.db, sessions: store.db.sessions.map(s => ({...s, messages: s.messages.map(m => ({...m, attachments: (m.attachmentIds ?? []).map(id => attachments.preview(id)) }))})), settings: settings.snapshot(), workflows: Object.fromEntries(settings.db.profiles.filter(p => p.type === 'comfyui').map(p => [p.baseUrl, workflows.summary(p.baseUrl)])), profileHealth, settingsBusy, connection, busy, notice, omittedRounds, updates: updates?.snapshot(), security: { encrypted: true, vaultDirectory: dataDir } });
   const publish = () => { if (window && !window.isDestroyed()) window.webContents.send('chat:update', snapshot()); };
   const guard = event => {
     if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Ungültiger Fensteraufruf.');
@@ -66,12 +69,40 @@ else {
     settingsBusy = true; publish();
     const before = JSON.stringify(settings.active);
     try {
-      await operation();
-      notice = '';
+      const result = await operation();
+      notice = result?.notice ?? '';
       if (before !== JSON.stringify(settings.active)) await check();
-      return { ok: true };
+      return { ...result, ok: true };
     } catch (error) { return { ok: false, error: error.message }; }
     finally { settingsBusy = false; publish(); }
+  }
+
+  async function refreshServers(id) {
+    const profiles = settings.snapshot().profiles;
+    const selected = id ? profiles.find(p => p.id === id) : null;
+    if (id && !selected) throw new Error('Server nicht gefunden.');
+    const seen = new Set(); let added = 0; let failed = 0;
+    for (const profile of profiles) {
+      if (selected && profile.baseUrl !== selected.baseUrl) continue;
+      const key = JSON.stringify([profile.baseUrl, profile.type, profile.authRef]);
+      if (seen.has(key)) continue; seen.add(key);
+      try {
+        const scanProfile = { ...profile, type: profile.type === 'ollama' ? 'auto' : profile.type };
+        const models = await inspectServer(scanProfile, credentials.get(profile));
+        const count = settings.db.profiles.length;
+        if (models.length) await settings.importServer({ ...profile, name: profile.name.split(' · ')[0].slice(0, 30), models });
+        added += settings.db.profiles.length - count;
+        for (const p of settings.db.profiles.filter(p => p.baseUrl === profile.baseUrl && (p.type === profile.type || models.some(m => m.type === p.type)))) {
+          const available = models.some(m => m.name === p.model && (m.type ?? profile.type) === p.type);
+          profileHealth[p.id] = { state: available ? 'online' : 'offline', message: available ? 'Modell auf dem Server vorhanden' : 'Modell derzeit nicht in der Serverliste' };
+        }
+      } catch (error) {
+        failed++;
+        for (const p of profiles.filter(p => p.baseUrl === profile.baseUrl && p.type === profile.type)) profileHealth[p.id] = { state: 'offline', message: error.message };
+        if (id) throw error;
+      }
+    }
+    return { added, notice: failed ? `${failed} Server-Prüfung(en) fehlgeschlagen. Gespeicherte Verbindungen bleiben erhalten.` : added ? `${added} neue Modelle erkannt. Du kannst sie in den Einstellungen aktivieren.` : '' };
   }
 
   async function start() {
@@ -81,6 +112,7 @@ else {
   store = new SessionStore(dataDir, cipher, { legacyDirectory, importLatestLegacy: process.argv.includes('--import-latest-legacy') });
   settings = new SettingsStore(dataDir, cipher, { legacyDirectory, legacyHttpAllowed: true });
   credentials = new CredentialStore(dataDir, cipher);
+  workflows = new WorkflowStore(dataDir, cipher); await workflows.load();
   await credentials.load(); await store.load(); await settings.load();
   const validateImage = item => {
     const image = nativeImage.createFromBuffer(Buffer.from(item.base64, 'base64')); const size = image.getSize();
@@ -103,21 +135,14 @@ else {
       updating = true;
       try {
         if (drafts.size || await window.webContents.executeJavaScript("Boolean(document.querySelector('#message-input').value.trim())")) throw new Error('Ungesendete Nachricht.');
-        await Promise.all([store.storage.queue, settings.storage.queue, credentials.storage.queue]);
+        await Promise.all([store.storage.queue, settings.storage.queue, credentials.storage.queue, workflows.storage.queue]);
         await backupVault(dataDir, cipher, app.getVersion());
       } catch (error) { updating = false; throw error; }
     },
     // The unsigned pilot never installs downloaded executables automatically.
     installAllowed: false,
   });
-  if (process.argv.includes('--refresh-known-servers')) {
-    const seen = new Set();
-    for (const profile of settings.snapshot().profiles) {
-      if (seen.has(profile.baseUrl)) continue; seen.add(profile.baseUrl);
-      const models = await inspectServer(profile, credentials.get(profile));
-      if (models.length) await settings.importServer({ name: profile.name.split(' · ')[0].slice(0, 30), baseUrl: profile.baseUrl, allowHttp: profile.allowHttp, models, authRef: profile.authRef, authType: profile.authType });
-    }
-  }
+  if (process.argv.includes('--refresh-known-servers')) await refreshServers();
   if (process.argv.includes('--audit-migration')) {
     console.log(JSON.stringify({ vaultDirectory: dataDir, sessions: store.db.sessions.length, messages: store.db.sessions.reduce((n, s) => n + s.messages.length, 0), activeId: settings.db.activeId, profiles: settings.db.profiles.map(p => ({ id: p.id, enabled: p.enabled })) }));
     app.quit(); return;
@@ -137,7 +162,7 @@ else {
     event.preventDefault(); controller?.abort();
     void (async () => {
       while (busy || settingsBusy) await new Promise(resolve => setTimeout(resolve, 50));
-      await Promise.all([store.storage.queue, settings.storage.queue, credentials.storage.queue]);
+      await Promise.all([store.storage.queue, settings.storage.queue, credentials.storage.queue, workflows.storage.queue]);
       closing = true; window.close();
     })().catch(() => { notice = 'Speichern fehlgeschlagen. Das Fenster bleibt zur Sicherheit geöffnet.'; publish(); });
   });
@@ -158,7 +183,26 @@ else {
   register('updates:check', () => updates.check());
   register('updates:download', () => updates.download());
   register('updates:install', () => updates.install());
-  register('chat:check', () => check());
+  register('chat:check', async () => { const result = await changeSettings(() => refreshServers(settings.active?.id)); if (result.ok) await check(); return result; });
+  register('settings:refresh', id => changeSettings(() => refreshServers(id)));
+  register('settings:remove', (id, wholeServer = false) => changeSettings(async () => {
+    const removed = await settings.remove(id, wholeServer);
+    for (const profile of removed) delete profileHealth[profile.id];
+    try { await credentials.collectUnused(settings.db.profiles); await workflows.collectUnused(settings.db.profiles); }
+    catch { return { notice: 'Verbindung entfernt. Ein ungenutzter Zugang konnte noch nicht aus dem verschlüsselten Tresor entfernt werden.' }; }
+    return { removed: removed.length };
+  }));
+  register('settings:workflow', id => changeSettings(async () => {
+    const profile = settings.db.profiles.find(p => p.id === id && p.type === 'comfyui');
+    if (!profile) throw new Error('Bitte eine ComfyUI-Verbindung auswählen.');
+    const selected = await dialog.showOpenDialog(window, { title: 'ComfyUI-Workflow im API-Format importieren', properties: ['openFile'], filters: [{ name: 'API-Workflow', extensions: ['json'] }] });
+    if (selected.canceled) return { cancelled: true };
+    const file = selected.filePaths[0];
+    if ((await stat(file)).size > 2 * 1024 * 1024) throw new Error('Der Workflow darf maximal 2 MB groß sein.');
+    let raw; try { raw = JSON.parse(await readFile(file, 'utf8')); } catch { throw new Error('Bitte eine gültige JSON-Datei im API-Format auswählen.'); }
+    await workflows.import(profile.baseUrl, basename(file), raw);
+    return { notice: 'API-Workflow verschlüsselt importiert. Prompt-Zuordnung und Bildlauf werden anschließend eingerichtet.' };
+  }));
   register('settings:save', profile => changeSettings(async () => {
     const existing = settings.db.profiles.find(p => p.id === profile?.id);
     const candidate = { ...existing, ...profile };
@@ -177,7 +221,7 @@ else {
   });
   register('settings:server', raw => changeSettings(async () => {
     if (!raw || typeof raw.name !== 'string' || !raw.name.trim() || raw.name.length > 30) throw new Error('Bitte einen Servernamen mit maximal 30 Zeichen eingeben.');
-    const profile = { type: raw.type ?? 'ollama', baseUrl: normalizeOrigin(raw.baseUrl), allowHttp: raw.allowHttp === true };
+    const profile = { type: raw.type ?? 'auto', baseUrl: normalizeOrigin(raw.baseUrl), allowHttp: raw.allowHttp === true };
     const existing = raw.id ? settings.db.profiles.find(p => p.id === raw.id) : null;
     if (raw.useStoredAuth && (!existing || existing.baseUrl !== profile.baseUrl || existing.authType !== raw.auth?.type)) throw new Error('Für eine neue Adresse oder Zugangsart bitte neue Zugangsdaten eingeben.');
     const auth = raw.useStoredAuth ? credentials.get(existing) : normalizeAuth(raw.auth); secureHeaders(profile, auth);
@@ -185,7 +229,7 @@ else {
     if (!models.length) throw new Error('Server erreichbar, aber es sind noch keine Modelle installiert.');
     const ref = await credentials.add(profile.baseUrl, auth);
     const oldRefs = new Set(settings.db.profiles.filter(p => p.baseUrl === profile.baseUrl).map(p => p.authRef).filter(Boolean));
-    try { await settings.importServer({ ...profile, name: raw.name, models, authRef: ref, authType: auth.type }); }
+    try { await settings.importServer({ ...profile, name: raw.name, models, authRef: ref, authType: auth.type, restoreRemoved: true }); }
     catch (error) { await credentials.remove(ref); throw error; }
     for (const id of oldRefs) if (!settings.db.profiles.some(p => p.authRef === id)) await credentials.remove(id);
   }));
@@ -235,7 +279,7 @@ else {
       if (profile.type === 'image-api') {
         const image = await generateImage(text, { signal: controller.signal, profile, auth: credentials.get(profile), references: attachmentIds.map(id => attachments.get(id)) });
         validateImage(image); attachments.items.set(image.id, image); await attachments.persist([image.id]); generatedIds = [image.id]; reply = 'Hier ist dein Bild.';
-      } else reply = await sendChat(context.messages, { signal: controller.signal, profile, auth: credentials.get(profile) });
+      } else reply = await (profile.type === 'openai-chat' ? sendOpenaiChat : sendChat)(context.messages, { signal: controller.signal, profile, auth: credentials.get(profile) });
       message.state = 'complete';
       active.messages.push({ id: randomUUID(), role: 'assistant', content: reply, model: profile.model, providerName: profile.name, state: 'complete', createdAt: new Date().toISOString(), ...(generatedIds ? { attachmentIds: generatedIds } : {}) });
       try { await store.save(); } catch { notice = 'Die Antwort ist da, aber der Verlauf konnte nicht gespeichert werden.'; }
@@ -252,11 +296,13 @@ else {
   });
 
   await window.loadFile(join(root, 'ui/index.html'));
-  await check();
+  if (!verify) await changeSettings(() => refreshServers());
+  if (!verifyUpdateOnly) await check();
   if ((process.argv.includes('--show-settings') || process.argv.includes('--show-security')) && !verify) await window.webContents.executeJavaScript(`document.querySelector('#settings-button').click(); ${process.argv.includes('--show-security') ? "document.querySelector('#tab-security').click();" : ''}`);
   if (verify) {
     try {
-      const report = await verifyApplication({ root, dataDir, window, store, settings, cipher, credentials, attachments, drafts, publish, snapshot });
+      const verifier = verifyUpdateOnly ? (await import('./verify-update.mjs')).verifyUpdate : verifyApplication;
+      const report = await verifier({ root, dataDir, window, store, settings, cipher, credentials, workflows, attachments, drafts, publish, snapshot });
       console.log(JSON.stringify(report));
       app.quit();
     } catch (error) { console.error(error); app.exit(1); }

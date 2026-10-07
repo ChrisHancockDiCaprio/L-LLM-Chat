@@ -58,7 +58,7 @@ export async function verifyApplication({ root, dataDir, window, store, settings
     return new Response(JSON.stringify(url.endsWith('/api/tags') ? { models: [{ name: 'test:model' }] } : { capabilities: ['completion'], model_info: { 'test.context_length': 8192 } }));
   };
   try {
-    await run(`document.querySelector('#tab-local').click(); document.querySelector('#add-server').click(); document.querySelector('#server-name').value = 'Test · Freund'; document.querySelector('#server-url').value = 'https://friend.example'; document.querySelector('#server-auth').value = 'bearer'; document.querySelector('#server-auth').dispatchEvent(new Event('change')); document.querySelector('#server-secret').value = ${JSON.stringify(canary)}; document.querySelector('#server-form').requestSubmit();`);
+    await run(`document.querySelector('#tab-local').click(); document.querySelector('#add-server').click(); document.querySelector('#server-type').value = 'ollama'; document.querySelector('#server-name').value = 'Test · Freund'; document.querySelector('#server-url').value = 'https://friend.example'; document.querySelector('#server-auth').value = 'bearer'; document.querySelector('#server-auth').dispatchEvent(new Event('change')); document.querySelector('#server-secret').value = ${JSON.stringify(canary)}; document.querySelector('#server-form').requestSubmit();`);
     await until(async () => !snapshot().settingsBusy && await run(`document.querySelector('#server-form').hidden`), 'authenticated server import');
     const imported = settings.db.profiles.find(p => p.baseUrl === 'https://friend.example');
     report.authenticatedImport = Boolean(imported?.authRef) && authenticatedCalls === 2 && !imported.enabled;
@@ -128,7 +128,7 @@ export async function verifyApplication({ root, dataDir, window, store, settings
     report.imageRestored = restoredAttachments.get(generatedId).base64 === fixtureBase64;
     await image('preview-images.png');
     await run(`document.querySelector('#settings-button').click(); document.querySelector('#tab-updates').click();`);
-    report.updatesPanel = await run(`!document.querySelector('#updates-panel').hidden && document.querySelector('#app-version').textContent === '0.2.0' && document.querySelector('#update-install').disabled`);
+    report.updatesPanel = await run(`!document.querySelector('#updates-panel').hidden && document.querySelector('#app-version').textContent === ${JSON.stringify(snapshot().updates.version)} && document.querySelector('#update-install').disabled`);
     await image('preview-updates.png');
   } finally { globalThis.fetch = originalFetch; await settings.commit(originalProfiles); publish(); }
   if (![report.realVision || report.visionFixture, report.inlineImage, report.encryptedAttachment, report.imageGenerationFixture, report.imageRestored, report.updatesPanel].every(Boolean)) throw new Error('Attachment/image/update verification failed');

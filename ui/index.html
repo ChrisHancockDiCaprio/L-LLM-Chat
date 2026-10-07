@@ -57,13 +57,15 @@
     <div id="settings-feedback" class="settings-feedback" role="status" hidden></div>
     <section id="local-panel">
       <div class="settings-section-heading"><div><h3>Deine Server und Modelle</h3><p>Server prüfen, Modelle entdecken und gezielt aktivieren.</p></div><button id="add-server" class="primary-button">＋ Server</button></div>
+      <button id="refresh-servers" class="secondary-button" type="button">Alle Server prüfen</button>
+      <div id="delete-confirm" class="settings-feedback" hidden role="alert"><p id="delete-confirm-text"></p><div class="server-actions"><button id="delete-confirm-cancel" class="secondary-button" type="button">Behalten</button><button id="delete-confirm-yes" class="primary-button danger-button" type="button">Jetzt entfernen</button></div></div>
       <form id="server-form" class="profile-form" hidden autocomplete="off">
         <div class="form-title"><h3>Server hinzufügen oder aktualisieren</h3><button id="server-form-close" type="button" class="icon-button" aria-label="Serverformular schließen">×</button></div>
         <input id="server-id" type="hidden">
-        <label for="server-type">Verbindungsart</label><select id="server-type"><option value="ollama">Ollama · Chat &amp; Bilder verstehen</option><option value="image-api">Bildgenerator · OpenAI-kompatibel / stable-diffusion.cpp</option></select>
+        <label for="server-type">Verbindungsart</label><select id="server-type"><option value="auto">Chatserver automatisch erkennen</option><option value="ollama">Ollama · Chat &amp; Bilder verstehen</option><option value="openai-chat">OpenAI-kompatibler Chatserver / Gateway</option><option value="comfyui">ComfyUI · Bild-Workflow vorbereiten</option><option value="image-api">Bildgenerator · OpenAI-kompatibel / stable-diffusion.cpp</option></select>
         <label for="server-name">Servername</label><input id="server-name" required maxlength="30" placeholder="Zum Beispiel: Mein Server">
         <label for="server-url">Serveradresse</label><input id="server-url" type="url" required placeholder="https://mein-server.example">
-        <p class="settings-hint">Der Bildserver stellt /v1/models sowie /v1/images/generations bereit. Für Bildbearbeitung zusätzlich /v1/images/edits. Qwen-Image-GGUF läuft in einer separaten Laufzeit; die App lädt keine GGUF-Dateien. Eine direkte ComfyUI-Verbindung benötigt einen passenden Adapter.</p>
+        <p class="settings-hint">Automatische Erkennung liest die Modelllisten von Ollama und OpenAI-kompatiblen Chatservern. ComfyUI wird getrennt geprüft; Modelldateien und GGUF-Knoten werden erkannt und API-Workflows verschlüsselt importiert. Der ComfyUI-Bildlauf wird später mit deinem getesteten Workflow eingerichtet. OpenAI-kompatible Bildserver verwenden eine andere Verbindungsart.</p>
         <label for="server-auth">Zugang</label><select id="server-auth"><option value="none">Ohne Zugangsdaten</option><option value="bearer">API-Schlüssel (Bearer)</option><option value="basic">Benutzername und Passwort</option></select>
         <div id="server-user-field" hidden><label for="server-user">Benutzername</label><input id="server-user" maxlength="200" autocomplete="off"></div>
         <div id="server-secret-field" hidden><label id="server-secret-label" for="server-secret">API-Schlüssel</label><input id="server-secret" type="password" maxlength="4096" autocomplete="new-password" spellcheck="false"><p class="settings-hint">Wird verschlüsselt im Windows-Tresor abgelegt. Ein leeres Feld behält einen vorhandenen Zugang für dieselbe Adresse bei.</p></div>
@@ -78,13 +80,13 @@
       <form id="profile-form" class="profile-form" hidden>
         <div class="form-title"><h3 id="profile-form-title">Neue Ollama-Verbindung</h3><button id="profile-form-close" type="button" class="icon-button" aria-label="Bearbeitung schließen">×</button></div>
         <input id="profile-id" type="hidden">
-        <label for="profile-type">Verbindungsart</label><select id="profile-type"><option value="ollama">Ollama-Chat</option><option value="image-api">Bildgenerator (OpenAI-kompatibel)</option></select>
+        <label for="profile-type">Verbindungsart</label><select id="profile-type"><option value="ollama">Ollama-Chat</option><option value="openai-chat">OpenAI-kompatibler Chat</option><option value="comfyui">ComfyUI (Vorbereitung)</option><option value="image-api">Bildgenerator (OpenAI-kompatibel)</option></select>
         <label for="profile-name">Name</label><input id="profile-name" required maxlength="60" placeholder="Zum Beispiel: Qwen auf Ubuntu">
-        <label for="profile-url">Ollama-Server</label><div class="url-field"><input id="profile-url" required type="url" placeholder="https://mein-server.example"><button id="probe-server" type="button" class="secondary-button">Modelle laden</button></div>
+        <label for="profile-url">Serveradresse</label><div class="url-field"><input id="profile-url" required type="url" placeholder="https://mein-server.example"><button id="probe-server" type="button" class="secondary-button">Modelle laden</button></div>
         <label for="profile-model">Modell</label><input id="profile-model" required list="model-options" maxlength="200" placeholder="qwen3.5:4b"><datalist id="model-options"></datalist>
         <p id="probe-feedback" class="probe-feedback" role="status"></p>
         <div class="model-options-grid"><div><label for="profile-temperature">Kreativität (0–2)</label><input id="profile-temperature" type="number" min="0" max="2" step="0.1" value="0.7" required></div><div><label for="profile-context">Kontextfenster (Tokens)</label><input id="profile-context" type="number" min="512" max="32768" step="1" value="8192" required></div><div><label for="profile-output">Antwortlimit (Tokens)</label><input id="profile-output" type="number" min="128" max="8192" step="1" value="2048" required></div></div>
-        <p class="settings-hint">Kontext, Kreativität und Antwortlimit gelten für Ollama-Chats. Bildeingaben brauchen ein Modell mit Vision. Der Bildgenerator fordert ein Bild mit 1024 × 1024 Pixeln an; weitere Bildparameter und Tool-Aufrufe sind noch nicht bedienbar.</p>
+        <p class="settings-hint">Chat: Kreativität und Antwortlimit werden übermittelt. Bei OpenAI-kompatiblen Servern begrenzt das Kontextfenster die mitgesendete Historie; die Server-Kontextgröße stellst du dort ein. Bildeingaben benötigen eine gemeldete Vision-Fähigkeit. Neue Modelle bleiben deaktiviert. Entfernte Modelle werden beim Start nicht wieder hinzugefügt.</p>
         <label class="checkbox-label"><input id="profile-http" type="checkbox"> HTTP ohne Zugangsdaten im Heimnetz erlauben</label>
         <div class="form-bottom"><label class="checkbox-label"><input id="profile-enabled" type="checkbox" checked> In dieser App aktivieren</label><button id="save-profile" class="primary-button" type="submit">Verbindung speichern</button></div>
       </form>

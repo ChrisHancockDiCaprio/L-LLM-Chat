@@ -2,6 +2,8 @@
 
 ## Umgesetzt
 
+Seit 0.2.1 werden importierte ComfyUI-API-Workflows ebenfalls mit Windows DPAPI verschlüsselt als `workflows.vault` gespeichert. Die Oberfläche erhält nur Name und Knotenzahl. Verbindungslöschung bereinigt ungenutzte Zugänge und Workflows; alte verschlüsselte Versionssicherungen bleiben erhalten.
+
 Verbindungen, Modellparameter und Auswahl liegen verschlüsselt in `settings.vault`, Zugangsdaten getrennt in `credentials.vault`, Gespräche in `history.vault`. Der normale Speicherort ist `%LOCALAPPDATA%\QwenChat\Vault`, außerhalb des Quellcodes und des Projektordners. Electron-Betriebsdateien liegen daneben unter `App`. Im Projekt wird kein Schlüssel und keine neue Klartextkonfiguration angelegt.
 
 Die Verschlüsselung nutzt Electrons asynchrones `safeStorage` mit Windows DPAPI. Der Schutz hängt am Windows-Benutzerkonto; das Programm hat kein fest eingebautes Verschlüsselungspasswort. Ohne verfügbaren Windows-Schutz beendet es den Start. Beschädigte oder nicht entschlüsselbare Tresore werden erhalten und nicht durch leere Daten ersetzt. Temporäre Speicherkopien sind ebenfalls verschlüsselt. Schreiben und Wiederlesen werden vor dem Ersetzen einer Datei geprüft. [Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage)

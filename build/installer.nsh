@@ -10,23 +10,57 @@ Function CheckVaultDirectory
   Push $0
   Push $1
   Push $2
+  Push $3
   StrCpy $VaultDirectoryUnsafe "0"
-  GetFullPathName $0 "$INSTDIR\"
-  GetFullPathName $1 "$LOCALAPPDATA\QwenChat\"
-  System::Call 'shlwapi::PathIsPrefixW(w r0, w r1) i .r2'
-  ${If} $2 != 0
+  ; Drive roots and drive-relative roots are never program directories.
+  StrLen $2 $INSTDIR
+  ${If} $2 <= 3
     Goto unsafe
   ${EndIf}
-  System::Call 'shlwapi::PathIsPrefixW(w r1, w r0) i .r2'
-  ${If} $2 != 0
+  ; The NSIS GetFullPathName instruction may return empty for a not-yet
+  ; created directory. The Win32 API canonicalizes those paths as well.
+  StrCpy $3 $INSTDIR
+  System::Call 'kernel32::GetFullPathNameW(w r3, i ${NSIS_MAX_STRLEN}, w .r0, p 0) i .r2'
+  ${If} $2 == 0
+  ${OrIf} $2 >= ${NSIS_MAX_STRLEN}
     Goto unsafe
   ${EndIf}
+  StrLen $2 $0
+  ${If} $2 <= 3
+    Goto unsafe
+  ${EndIf}
+  ; Match the app's derivation from Roaming AppData. LocalAppData can be
+  ; redirected when an installer is launched inside a Windows app container.
+  StrCpy $3 "$APPDATA\..\Local\QwenChat"
+  System::Call 'kernel32::GetFullPathNameW(w r3, i ${NSIS_MAX_STRLEN}, w .r1, p 0) i .r2'
+  ${If} $2 == 0
+  ${OrIf} $2 >= ${NSIS_MAX_STRLEN}
+    Goto unsafe
+  ${EndIf}
+  ; Compare complete path components, including drive roots, without relying
+  ; on PathIsPrefixW's surprising treatment of trailing separators.
+  StrCpy $2 $0 1 -1
+  ${If} $2 != "\"
+    StrCpy $0 "$0\"
+  ${EndIf}
+  StrCpy $2 $1 1 -1
+  ${If} $2 != "\"
+    StrCpy $1 "$1\"
+  ${EndIf}
+  StrLen $2 $1
+  StrCpy $3 $0 $2
+  StrCmp $3 $1 unsafe
+  StrLen $2 $0
+  StrCpy $3 $1 $2
+  StrCmp $3 $0 unsafe
+  Pop $3
   Pop $2
   Pop $1
   Pop $0
   Return
 unsafe:
   StrCpy $VaultDirectoryUnsafe "1"
+  Pop $3
   Pop $2
   Pop $1
   Pop $0

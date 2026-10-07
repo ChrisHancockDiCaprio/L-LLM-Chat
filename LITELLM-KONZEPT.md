@@ -1,5 +1,7 @@
 # LiteLLM-Anbindung – Konzept
 
+Stand 0.2.1: Unter **Server & Modelle** ist ein allgemeiner OpenAI-kompatibler Chatanschluss mit Modellliste, HTTPS-Zugang und verschlüsseltem Tresor nutzbar. Eine konkrete LiteLLM-Instanz und deren besondere Verwaltung wurden noch nicht eingerichtet oder geprüft. Dieser Reiter bleibt eine Konzeptansicht.
+
 Die Anwendung zeigt bereits eine eigene LiteLLM-Ansicht in den Einstellungen. Sie ist ausdrücklich ein Konzept und stellt keine Verbindung her. Es ist kein LiteLLM-Server installiert, kein Anbieter eingerichtet und kein Schlüssel gespeichert.
 
 ## Vorgesehene Bedienung

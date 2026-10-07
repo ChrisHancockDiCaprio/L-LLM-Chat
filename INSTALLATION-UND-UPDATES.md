@@ -1,7 +1,7 @@
-# Qwen Chat 0.2.0 installieren
+# Qwen Chat 0.2.1 installieren
 
 1. Eine laufende Qwen-Chat-App schließen, nachdem Antworten und Eingaben abgeschlossen sind.
-2. `Qwen-Chat-Setup-0.2.0-x64.exe` öffnen. Diese Pilotversion ist noch ohne Windows-Herausgeberzertifikat; Windows kann einen Hinweis anzeigen.
+2. `Qwen-Chat-Setup-0.2.1-x64.exe` öffnen. Diese Pilotversion ist noch ohne Windows-Herausgeberzertifikat; die Windows-Anwendungssteuerung kann die Ausführung blockieren. Sicherheitsrichtlinien nicht verändern.
 3. Programmordner wählen. Die Installation erfolgt für das aktuelle Windows-Konto. Node.js, Electron oder Python müssen auf dem Zielrechner nicht separat installiert werden.
 4. Über Startmenü oder Desktopverknüpfung öffnen. Bestehende Verbindungen und Chats desselben Windows-Kontos werden übernommen. Bei einer frischen Installation Server hinzufügen und Modelle ausdrücklich aktivieren.
 
@@ -35,6 +35,12 @@ Die Update-Vorbereitung kann verschlüsselte Kopien aller erforderlichen Tresord
 Das Icon ist das unveränderte SVG des SoL-Weltenatlas. PNG und Windows-ICO sind daraus abgeleitet.
 
 ## Lokale Verifikation
+
+Version 0.2.1: 56 automatisierte Prüfungen und ein eigener isolierter Fenstertest bestanden. Eine frühere gepackte 0.2.1-Ausgabe öffnete den vorhandenen 0.2.0-Testtresor einschließlich Chat, Modellauswahl, Zugang und Bild. Die finale Setup-Datei bestand neun Verzeichnisprüfungen im reinen Prüfmodus, ohne Installation: Tresor, Unterordner, Elternordner, Laufwerkswurzel, Groß-/Kleinschreibung, ..-Normalisierung, normaler Programmordner, ähnlich benannter Nachbar und neuer sicherer Ordner. Eine Schwäche bei abschließenden Pfadtrennern und noch nicht angelegten Verzeichnissen wurde dabei korrigiert.
+
+Beim abschließenden Start blockierte die Windows-Anwendungssteuerung jedoch die neu erzeugte unsignierte Programmdatei. Die endgültige gepackte App wurde deshalb nicht ausgeführt, und ein vollständiger realer Installationslauf dieser finalen Version bleibt offen. Die laufende 0.2.0-Installation wurde nicht ersetzt. Das neue Setup ist ein Testentwurf; vor dem normalen Update muss die vertrauenswürdige Windows-Signierung geklärt werden. Keine Richtlinie wurde deaktiviert und kein alternativer Loader für das blockierte Programm verwendet.
+
+Zum Update-Test zuerst in der bisherigen Version einen kurzen Chat hinterlassen, Eingaben abschließen und die App schließen. Dann das neue Setup über den bestehenden Programmordner installieren und den alten Chat öffnen. Der Windows-Tresorpfad bleibt gleich. Die bisherigen Programmdateien werden während des Builds nicht überschrieben; die neue lokale Ausgabe liegt in `dist-update-0.2.1`.
 
 45 automatisierte Prüfungen bestanden. Ein isolierter realer Setup-Lauf installierte 0.2.0 und aktualisierte auf eine Testversion 0.2.1; Gespräche, Modellauswahl und Zugang blieben lesbar. Der zuletzt erzeugte unsignierte Testinstaller wurde anschließend von der Windows-Anwendungssteuerung blockiert. Die endgültige Verzeichnis-Sperre konnte deshalb nicht in diesem Installer ausgeführt werden. Ihre Umsetzung ist enthalten, aber diese letzte Laufzeitprüfung bleibt offen. Windows-Sicherheitsrichtlinien wurden nicht verändert.
 

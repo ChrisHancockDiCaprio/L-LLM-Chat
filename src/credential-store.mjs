@@ -24,5 +24,17 @@ export class CredentialStore {
     if (!entry || entry.origin !== normalizeOrigin(profile.baseUrl)) throw new Error('Der gespeicherte Zugang gehört nicht zu diesem Server.');
     return normalizeAuth(entry.auth);
   }
-  async remove(id) { if (id && this.db.entries[id]) { delete this.db.entries[id]; await this.save(); } }
+  async remove(id) {
+    if (!id || !this.db.entries[id]) return;
+    const entry = this.db.entries[id]; delete this.db.entries[id];
+    try { await this.save(); } catch (error) { this.db.entries[id] = entry; throw error; }
+  }
+  async collectUnused(profiles) {
+    const used = new Set(profiles.map(p => p.authRef).filter(Boolean));
+    const previous = this.db.entries;
+    const next = Object.fromEntries(Object.entries(previous).filter(([id]) => used.has(id)));
+    if (Object.keys(next).length === Object.keys(previous).length) return;
+    this.db.entries = next;
+    try { await this.save(); } catch (error) { this.db.entries = previous; throw error; }
+  }
 }

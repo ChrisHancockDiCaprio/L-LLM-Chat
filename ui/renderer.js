@@ -1,6 +1,6 @@
 const api = window.qwenChat;
 const $ = selector => document.querySelector(selector);
-let state; let cancelling = false; let probing = false; let draftAttachments = [];
+let state; let cancelling = false; let probing = false; let draftAttachments = []; let deletion;
 const input = $('#message-input');
 function renderAttachments() {
   $('#attachment-list').replaceChildren(...draftAttachments.map(attachment => {
@@ -141,7 +141,7 @@ function settingsFeedback(message, success = false) {
   $('#settings-feedback').classList.toggle('success', success);
 }
 async function settingsAction(action, success = '') {
-  try { const result = await action(); settingsFeedback(result.ok ? success : result.error, result.ok); return result; }
+  try { const result = await action(); settingsFeedback(result.cancelled ? '' : result.ok ? result.notice || success : result.error, result.ok); return result; }
   catch { settingsFeedback('Die Einstellungen konnten nicht geändert werden.'); return { ok: false }; }
 }
 function renderSettings() {
@@ -149,6 +149,10 @@ function renderSettings() {
   $('#vault-location').textContent = state.security?.vaultDirectory ?? '';
   $('#add-server').disabled = locked;
   $('#add-profile').disabled = locked;
+  $('#refresh-servers').disabled = locked || !state.settings.profiles.length;
+  $('#delete-confirm').hidden = !deletion;
+  $('#delete-confirm-text').textContent = deletion ? `${deletion.wholeServer ? 'Server mit allen Modellverbindungen' : 'Modellverbindung'} „${deletion.name}“ entfernen? Deine Gespräche und die Modelle auf dem Server bleiben erhalten.` : '';
+  $('#delete-confirm-yes').disabled = locked;
   $('#server-form').querySelectorAll('input,button,select').forEach(field => { field.disabled = locked; });
   $('#profile-form').querySelectorAll('input,button,select').forEach(field => { field.disabled = locked || field.id === 'probe-server' && probing; });
   const cards = state.settings.profiles.map(profile => {
@@ -183,7 +187,19 @@ function renderSettings() {
       if (result.ok) settingsFeedback(result.models.includes(profile.model) ? `${profile.name} ist erreichbar; das Modell ist vorhanden.` : `Server erreichbar, aber ${profile.model} wurde nicht gefunden.`, result.models.includes(profile.model));
       test.disabled = false;
     });
-    actions.append(use, edit, test); card.append(head, actions); return card;
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'profile-remove secondary-button danger-button'; remove.dataset.profile = profile.id; remove.textContent = 'Entfernen'; remove.disabled = locked;
+    remove.addEventListener('click', () => confirmDeletion(profile, false));
+    if (profile.type === 'comfyui') {
+      const workflow = document.createElement('button'); workflow.type = 'button'; workflow.className = 'secondary-button'; workflow.textContent = 'API-Workflow importieren'; workflow.disabled = locked;
+      workflow.addEventListener('click', () => settingsAction(() => api.importWorkflow(profile.id), 'Workflow verschlüsselt importiert. Die Bildausführung wird anschließend eingerichtet.'));
+      actions.append(workflow);
+      const note = document.createElement('p'); note.className = 'settings-hint';
+      const imported = state.workflows?.[profile.baseUrl];
+      note.textContent = `ComfyUI vorbereitet · ${profile.serverInfo?.ggufAvailable ? 'GGUF-Knoten erkannt' : 'GGUF-Knoten nicht gemeldet'} · ${profile.serverInfo?.modelFiles?.length ?? 0} Modelldateien gemeldet. ${imported ? `Workflow: ${imported.name} (${imported.nodeCount} Knoten).` : 'Noch kein API-Workflow importiert.'} Prompt-Zuordnung und Bildlauf folgen.`;
+      details.append(note); use.disabled = true; test.disabled = locked;
+      toggle.disabled = true;
+    }
+    actions.append(use, edit, test, remove); card.append(head, actions); return card;
   });
   const grouped = []; const origins = new Set();
   state.settings.profiles.forEach((profile, index) => {
@@ -192,12 +208,28 @@ function renderSettings() {
       const header = document.createElement('div'); header.className = 'server-group-heading';
       const name = document.createElement('strong'); name.textContent = profile.baseUrl;
       const refresh = document.createElement('button'); refresh.type = 'button'; refresh.className = 'secondary-button'; refresh.textContent = 'Modelle & Zugang aktualisieren'; refresh.disabled = locked;
-      refresh.addEventListener('click', () => editServer(profile)); header.append(name, refresh); grouped.push(header);
+      refresh.textContent = 'Modelle laden';
+      refresh.addEventListener('click', () => settingsAction(() => api.refreshServer(profile.id), 'Modellliste aktualisiert. Neue Modelle kannst du jetzt aktivieren.'));
+      const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary-button'; edit.textContent = 'Zugang bearbeiten'; edit.disabled = locked; edit.addEventListener('click', () => editServer(profile));
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'server-remove secondary-button danger-button'; remove.dataset.profile = profile.id; remove.textContent = 'Server löschen'; remove.disabled = locked; remove.addEventListener('click', () => confirmDeletion(profile, true));
+      const actions = document.createElement('div'); actions.className = 'server-actions'; actions.append(refresh, edit, remove);
+      header.append(name, actions); grouped.push(header);
       state.settings.profiles.forEach((p, i) => { if (p.baseUrl === profile.baseUrl) grouped.push(cards[i]); });
     }
   });
   $('#profile-list').replaceChildren(...grouped);
 }
+function confirmDeletion(profile, wholeServer) {
+  deletion = { id: profile.id, name: wholeServer ? profile.baseUrl : profile.name, wholeServer };
+  renderSettings(); $('#delete-confirm').scrollIntoView({ block: 'nearest' }); $('#delete-confirm-cancel').focus();
+}
+$('#delete-confirm-cancel').addEventListener('click', () => { deletion = undefined; renderSettings(); });
+$('#delete-confirm-yes').addEventListener('click', async () => {
+  const target = deletion; if (!target || state.busy || state.settingsBusy) return;
+  const result = await settingsAction(() => api.removeProfile(target.id, target.wholeServer), 'Verbindung entfernt. Deine Gespräche bleiben erhalten.');
+  if (result.ok) { deletion = undefined; clearServerSecret(); $('#server-form').hidden = true; $('#profile-form').hidden = true; renderSettings(); }
+});
+$('#refresh-servers').addEventListener('click', () => settingsAction(() => api.refreshServer(), 'Gespeicherte Server geprüft. Neue Modelle kannst du jetzt aktivieren.'));
 function editProfile(profile) {
   $('#profile-form').hidden = false;
   $('#profile-form-title').textContent = profile ? 'Verbindung bearbeiten' : 'Neue Ollama-Verbindung';
@@ -225,7 +257,7 @@ function authFields() {
 function editServer(profile) {
   clearServerSecret(); $('#server-form').hidden = false; $('#profile-form').hidden = true;
   $('#server-id').value = profile?.id ?? ''; $('#server-name').value = profile ? profile.name.split(' · ')[0].slice(0, 30) : '';
-  $('#server-type').value = profile?.type ?? 'ollama';
+  $('#server-type').value = profile?.type ?? 'auto';
   $('#server-url').value = profile?.baseUrl ?? ''; $('#server-auth').value = profile?.authType ?? 'none';
   $('#server-http').checked = profile?.allowHttp ?? false; $('#server-feedback').textContent = '';
   authFields(); $('#server-name').focus(); $('#server-form').scrollIntoView({ block: 'nearest' });
@@ -238,7 +270,14 @@ function settingsTab(tab) {
 }
 $('#settings-button').addEventListener('click', () => { settingsTab('local'); if (!$('#settings-dialog').open) $('#settings-dialog').showModal(); });
 $('#settings-close').addEventListener('click', () => $('#settings-dialog').close());
-$('#settings-dialog').addEventListener('close', clearServerSecret);
+$('#settings-dialog').addEventListener('close', () => { clearServerSecret(); deletion = undefined; });
+let backdropPointer = false;
+const outsideDialog = event => { const box = $('#settings-dialog').getBoundingClientRect(); return event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom; };
+$('#settings-dialog').addEventListener('pointerdown', event => { backdropPointer = event.target === $('#settings-dialog') && outsideDialog(event); });
+$('#settings-dialog').addEventListener('click', event => {
+  if (backdropPointer && event.target === $('#settings-dialog') && outsideDialog(event)) $('#settings-dialog').close();
+  backdropPointer = false;
+});
 $('#tab-local').addEventListener('click', () => settingsTab('local'));
 $('#tab-security').addEventListener('click', () => settingsTab('security'));
 $('#tab-litellm').addEventListener('click', () => settingsTab('litellm'));
@@ -249,6 +288,12 @@ $('#update-install').addEventListener('click', () => settingsAction(() => api.in
 $('#add-server').addEventListener('click', () => editServer(null));
 $('#server-form-close').addEventListener('click', () => { clearServerSecret(); $('#server-form').hidden = true; });
 $('#server-auth').addEventListener('change', () => { clearServerSecret(); authFields(); });
+$('#server-type').addEventListener('change', () => {
+  if ($('#server-type').value === 'comfyui' && !$('#server-url').value) {
+    const known = state.settings.profiles.find(p => p.type === 'ollama');
+    if (known) { const url = new URL(known.baseUrl); url.port = '8188'; $('#server-url').value = url.origin; }
+  }
+});
 $('#server-form').addEventListener('submit', async event => {
   event.preventDefault();
   if (state.busy || state.settingsBusy) return;
