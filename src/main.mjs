@@ -1,3 +1,7 @@
+import { JobStore, boundJob, connectionIdentity } from './job-store.mjs';
+import { SSHStore, validateSSH, apiDestination } from './ssh-store.mjs';
+import { TunnelManager } from './tunnel-manager.mjs';
+import { createHash } from 'node:crypto';
 import { app, BrowserWindow, ipcMain, Menu, session, safeStorage, dialog, nativeImage } from 'electron';
 import { dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +19,7 @@ import { SessionStore, selectContext } from './session-store.mjs';
 import { sendChat } from './ollama-client.mjs';
 import { sendOpenaiChat } from './openai-client.mjs';
 import { WorkflowStore } from './workflow-store.mjs';
-import { generateComfyImages, prepareComfyWorkflow } from './comfyui-client.mjs';
+import { generateComfyImages, prepareComfyWorkflow, queryComfyJob, fetchComfyResult, cancelComfyJob } from './comfyui-client.mjs';
 import { SettingsStore, discoverModels, inspectServer, normalizeOrigin } from './settings-store.mjs';
 import { CredentialStore } from './credential-store.mjs';
 import { protectLegacyBackups } from './secure-file.mjs';
@@ -38,15 +42,40 @@ else {
   let window; let controller; let busy = false; let checking; let settingsBusy = false; let checkEpoch = 0;
   let connection = { state: 'checking', message: 'Verbindung wird geprüft …' };
   let notice = ''; let omittedRounds = 0; let imageProgress = null;
+  let jobs; let sshStore; let tunnels; let activeJob; let currentServerStop; let jobAction = false; let actionController; let shuttingDown=false;
   let cipher; let store; let settings; let credentials; let workflows; let updates; let attachments; let closing = false; let updating = false;
   const drafts = new Set();
   const profileHealth = {};
-  const snapshot = () => ({ ...store.db, sessions: store.db.sessions.map(s => ({...s, messages: s.messages.map(m => ({...m, attachments: (m.attachmentIds ?? []).map(id => attachments.preview(id)) }))})), settings: settings.snapshot(), workflows: Object.fromEntries(settings.db.profiles.filter(p => p.type === 'comfyui').map(p => [p.id, workflows.summary(p)])), profileHealth, settingsBusy, connection, busy, notice, omittedRounds, imageProgress, updates: updates?.snapshot(), security: { encrypted: true, vaultDirectory: dataDir } });
+  const snapshot = () => ({ ...store.db, jobs: jobs?.snapshot().map(j=>({...j,bindingOK:boundJob(j,settings?.db?.profiles.find(p=>p.id===j.profileId))})), tunnels: tunnels?.snapshot(), activeJobId: activeJob?.id, jobAction, sessions: store.db.sessions.map(s => ({...s, messages: s.messages.map(m => ({...m, attachments: (m.attachmentIds ?? []).map(id => attachments.preview(id)) }))})), settings: settings.snapshot(), workflows: Object.fromEntries(settings.db.profiles.filter(p => p.type === 'comfyui').map(p => [p.id, workflows.summary(p)])), profileHealth, settingsBusy, connection, busy, notice, omittedRounds, imageProgress, updates: updates?.snapshot(), security: { encrypted: true, vaultDirectory: dataDir } });
   const publish = () => { if (window && !window.isDestroyed()) window.webContents.send('chat:update', snapshot()); };
   const guard = event => {
     if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Ungültiger Fensteraufruf.');
   };
   const register = (name, handler) => ipcMain.handle(name, async (event, ...args) => { guard(event); return handler(...args); });
+  const wireProfile = profile => tunnels.ensure(profile);
+  async function proveOnline(profile) {
+    try {
+      const wire = await wireProfile(profile); const models = await discoverModels(wire.baseUrl, {profile:wire,auth:credentials.get(profile),signal:actionController?.signal});
+      if(profile.type!=='comfyui' && !models.includes(profile.model)) throw Error('Modell nicht auf dem Server vorhanden.');
+      profileHealth[profile.id]={state:'online',message:'API erreichbar · Modell vorhanden',checkedAt:Date.now(),identity:connectionIdentity(profile)};
+    }catch(error){profileHealth[profile.id]={state:'offline',message:error.message,checkedAt:Date.now(),identity:connectionIdentity(profile)};throw error;}finally{publish();}
+  }
+  async function applyRecovered(job, result) {
+    const chat = store.db.sessions.find(s=>s.id===job.chatId); const message = chat?.messages.find(m=>m.id===job.messageId);
+    if(!chat||!message)throw Error('Das ursprüngliche Gespräch wurde gelöscht.');
+    if(chat.messages.some(m=>m.jobId===job.id && m.role==='assistant')) { await jobs.update(job.id,{state:'completed',waiting:false,detail:'Ergebnis bereits diesem Gespräch zugeordnet.'}); return; }
+    const ids=result.images.map((image,index)=>{
+      validateImageRuntime(image); const hash=createHash('sha256').update(job.id+':'+index).digest('hex');
+      image.id=hash.slice(0,8)+'-'+hash.slice(8,12)+'-'+hash.slice(12,16)+'-'+hash.slice(16,20)+'-'+hash.slice(20,32);
+      attachments.items.set(image.id,image);return image.id;
+    });
+    await attachments.persist(ids);
+    const reply={id:job.id,jobId:job.id,role:'assistant',content:'Hier ist dein Bild.'+(job.seed===undefined?'':' Seed: '+job.seed),model:job.model,providerName:job.providerName,state:'complete',createdAt:new Date().toISOString(),attachmentIds:ids};
+    message.state='complete'; chat.messages.splice(chat.messages.indexOf(message)+1,0,reply);
+    try{await store.save()}catch(error){chat.messages.splice(chat.messages.indexOf(reply),1);message.state='unknown';throw error;}
+    await jobs.update(job.id,{state:'completed',waiting:false,detail:'Ergebnis im ursprünglichen Gespräch gespeichert.'}); publish();
+  }
+  let validateImageRuntime;
   async function check() {
     const profile = settings.active;
     if (!profile) { checkEpoch++; checking = undefined; connection = { state: 'inactive', message: 'Keine KI ausgewählt' }; publish(); return connection; }
@@ -57,8 +86,8 @@ else {
     const promise = (async () => {
       let result;
       try {
-        const models = await discoverModels(profile.baseUrl, { profile, auth: credentials.get(profile) });
-        result = (profile.type === 'comfyui' || models.includes(profile.model)) ? { state: 'online', message: `Mit ${profile.name} verbunden${profile.baseUrl.startsWith('http:') ? ' · HTTP im Heimnetz' : ' · HTTPS'}` } : { state: 'offline', message: `${profile.model} fehlt auf dem Server` };
+        const wire = await wireProfile(profile); const models = await discoverModels(wire.baseUrl, { profile:wire, auth: credentials.get(profile) });
+        result = (profile.type === 'comfyui' || models.includes(profile.model)) ? { identity:connectionIdentity(profile), state: 'online', message: `Mit ${profile.name} verbunden${profile.baseUrl.startsWith('http:') ? ' · HTTP im Heimnetz' : ' · HTTPS'}` } : { state: 'offline', message: `${profile.model} fehlt auf dem Server` };
         if (epoch === checkEpoch) profileHealth[profile.id] = { ...result, models };
       } catch (error) { result = { state: 'offline', message: error.message }; }
       if (epoch === checkEpoch) { connection = result; profileHealth[profile.id] = { ...profileHealth[profile.id], ...result }; checking = undefined; publish(); }
@@ -67,7 +96,7 @@ else {
     checking = { key, promise }; return promise;
   }
   async function changeSettings(operation) {
-    if (busy || settingsBusy || updating) return { ok: false, error: 'Bitte warte auf den laufenden Vorgang oder brich die Antwort ab.' };
+    if (busy || settingsBusy || jobAction || updating || shuttingDown) return { ok: false, error: 'Bitte warte auf den laufenden Vorgang oder brich die Antwort ab.' };
     settingsBusy = true; publish();
     const before = JSON.stringify(settings.active);
     try {
@@ -85,22 +114,22 @@ else {
     if (id && !selected) throw new Error('Server nicht gefunden.');
     const seen = new Set(); let added = 0; let failed = 0;
     for (const profile of profiles) {
-      if (selected && profile.baseUrl !== selected.baseUrl) continue;
-      const key = JSON.stringify([profile.baseUrl, profile.type, profile.authRef]);
+      if (selected && apiDestination(profile) !== apiDestination(selected)) continue;
+      const key = JSON.stringify([apiDestination(profile), profile.type, profile.authRef]);
       if (seen.has(key)) continue; seen.add(key);
       try {
-        const scanProfile = { ...profile, type: profile.type === 'ollama' ? 'auto' : profile.type };
+        const scanProfile = await wireProfile({ ...profile, type: profile.type === 'ollama' ? 'auto' : profile.type });
         const models = await inspectServer(scanProfile, credentials.get(profile));
         const count = settings.db.profiles.length;
         if (models.length) await settings.importServer({ ...profile, name: profile.name.split(' · ')[0].slice(0, 30), models });
         added += settings.db.profiles.length - count;
-        for (const p of settings.db.profiles.filter(p => p.baseUrl === profile.baseUrl && (p.type === profile.type || models.some(m => m.type === p.type)))) {
+        for (const p of settings.db.profiles.filter(p => apiDestination(p) === apiDestination(profile) && (p.type === profile.type || models.some(m => m.type === p.type)))) {
           const available = models.some(m => (p.type === 'comfyui' || m.name === p.model) && (m.type ?? profile.type) === p.type);
-          profileHealth[p.id] = { state: available ? 'online' : 'offline', message: available ? 'Modell auf dem Server vorhanden' : 'Modell derzeit nicht in der Serverliste' };
+          profileHealth[p.id] = { identity:connectionIdentity(p), state: available ? 'online' : 'offline', message: available ? 'Modell auf dem Server vorhanden' : 'Modell derzeit nicht in der Serverliste' };
         }
       } catch (error) {
         failed++;
-        for (const p of profiles.filter(p => p.baseUrl === profile.baseUrl && p.type === profile.type)) profileHealth[p.id] = { state: 'offline', message: error.message };
+        for (const p of profiles.filter(p => apiDestination(p) === apiDestination(profile) && p.type === profile.type)) profileHealth[p.id] = { identity:connectionIdentity(p), state: 'offline', message: error.message };
         if (id) throw error;
       }
     }
@@ -114,12 +143,15 @@ else {
   store = new SessionStore(dataDir, cipher, { legacyDirectory, importLatestLegacy: process.argv.includes('--import-latest-legacy') });
   settings = new SettingsStore(dataDir, cipher, { legacyDirectory, legacyHttpAllowed: true });
   credentials = new CredentialStore(dataDir, cipher);
+  jobs = new JobStore(dataDir, cipher); await jobs.load();
+  sshStore = new SSHStore(dataDir, cipher); await sshStore.load(); tunnels = new TunnelManager(sshStore,{notify:()=>{for(const e of tunnels?.snapshot().connections??[])if(e.tunnel!=='ready')for(const id of e.profileIds)profileHealth[id]={state:'offline',message:e.detail};publish()}});
   workflows = new WorkflowStore(dataDir, cipher);
   await credentials.load(); await store.load(); await settings.load(); await workflows.load(settings.db.profiles);
   const validateImage = item => {
     const image = nativeImage.createFromBuffer(Buffer.from(item.base64, 'base64')); const size = image.getSize();
     if (image.isEmpty() || size.width > 8192 || size.height > 8192 || size.width * size.height > 24_000_000) throw new Error('Das Bild ist beschädigt oder hat zu viele Bildpunkte.');
   };
+  validateImageRuntime = validateImage;
   attachments = new AttachmentStore(dataDir, cipher, validateImage);
   await attachments.restore(store.db.sessions.flatMap(s => s.messages));
   if (releaseTestRoot) {
@@ -137,7 +169,7 @@ else {
       updating = true;
       try {
         if (drafts.size || await window.webContents.executeJavaScript("Boolean(document.querySelector('#message-input').value.trim())")) throw new Error('Ungesendete Nachricht.');
-        await Promise.all([store.storage.queue, settings.storage.queue, credentials.storage.queue, workflows.storage.queue]);
+        await Promise.all([store.storage.queue, settings.storage.queue, credentials.storage.queue, workflows.storage.queue, jobs.queue, sshStore.queue]);
         await backupVault(dataDir, cipher, app.getVersion());
       } catch (error) { updating = false; throw error; }
     },
@@ -161,10 +193,10 @@ else {
   window.webContents.on('will-navigate', event => event.preventDefault());
   window.on('close', event => {
     if (closing || updating || verify) return;
-    event.preventDefault(); controller?.abort();
+    event.preventDefault(); if(shuttingDown)return;shuttingDown=true;controller?.abort(); actionController?.abort(); tunnels.close();
     void (async () => {
-      while (busy || settingsBusy) await new Promise(resolve => setTimeout(resolve, 50));
-      await Promise.all([store.storage.queue, settings.storage.queue, credentials.storage.queue, workflows.storage.queue]);
+      while (busy || settingsBusy || jobAction) await new Promise(resolve => setTimeout(resolve, 50));
+      await Promise.all([store.storage.queue, settings.storage.queue, credentials.storage.queue, workflows.storage.queue, jobs.queue, sshStore.queue]);
       closing = true; window.close();
     })().catch(() => { notice = 'Speichern fehlgeschlagen. Das Fenster bleibt zur Sicherheit geöffnet.'; publish(); });
   });
@@ -172,9 +204,43 @@ else {
   app.on('second-instance', (_event, args) => { if (window.isMinimized()) window.restore(); window.show(); window.focus(); if (args.includes('--show-settings')) void window.webContents.executeJavaScript(`document.querySelector('#settings-button').click()`); });
   app.on('window-all-closed', () => app.quit());
 
+  register('ssh:trust', async (id,accept) => {try{await tunnels.confirm(id,accept);return {ok:true}}catch(error){return {ok:false,error:error.message}}});
+  register('ssh:key', config => changeSettings(async()=>{
+    const ssh=validateSSH({...config,authType:'key'}); if(!ssh)throw Error('SSH-Konfiguration fehlt.');
+    const selected=await dialog.showOpenDialog(window,{title:'SSH-Schlüssel importieren',properties:['openFile']});if(selected.canceled)return {cancelled:true};
+    if((await stat(selected.filePaths[0])).size>65536)throw Error('SSH-Schlüssel darf höchstens 64 KB groß sein.');
+    const ref=await sshStore.add(ssh,{privateKey:await readFile(selected.filePaths[0],'utf8'),passphrase:config.passphrase??''});
+    return {credentialsRef:ref,notice:'SSH-Schlüssel verschlüsselt im Zugangstresor gespeichert.'};
+  }));
+  register('jobs:check', async id=>{
+    if(busy||settingsBusy||jobAction||closing||shuttingDown||updating)return {ok:false,error:'Bitte den laufenden Vorgang abschließen.'};
+    jobAction=true;actionController=new AbortController();publish();
+    try{
+      const job=jobs.get(id);const profile=settings.db.profiles.find(p=>p.id===job.profileId);
+      if(!job.recoverable||job.backend!=='comfyui'||!job.serverId)throw Error('Dieses Backend bietet für den Auftrag keinen Ergebnis-Wiederabruf.');
+      if(!boundJob(job,profile))throw Error('Verbindung geändert oder gelöscht. Der Auftrag wird nicht auf einem anderen Server gesucht.');
+      const wire=await wireProfile(profile);const status=await queryComfyJob(job,{profile:wire,auth:credentials.get(profile),signal:actionController?.signal});
+      if(status.state==='completed')await applyRecovered(job,await fetchComfyResult(job,status.result,{profile:wire,auth:credentials.get(profile),signal:actionController?.signal}));
+      else await jobs.update(id,{state:status.state,detail:status.detail,waiting:false});
+      return {ok:true};
+    }catch(error){try{await jobs.update(id,{state:'unknown',waiting:false,detail:error.message+' Der Auftrag kann weiterhin auf dem Server laufen.'})}catch{}return {ok:false,error:error.message};}
+    finally{jobAction=false;actionController=undefined;publish();}
+  });
+  register('jobs:stop', async id=>{
+    if(settingsBusy||jobAction||closing||shuttingDown||updating)return {ok:false,error:'Bitte den laufenden Vorgang abschließen.'};
+    jobAction=true;publish();
+    try{
+      const job=jobs.get(id);const profile=settings.db.profiles.find(p=>p.id===job.profileId);
+      if(job.backend!=='comfyui'||!job.serverId||!boundJob(job,profile))throw Error('Kein verifizierter Serverabbruch für diesen Auftrag verfügbar.');
+      const wire=await wireProfile(profile);const result=await cancelComfyJob(job,{profile:wire,auth:credentials.get(profile)});
+      await jobs.update(id,{state:result.state,detail:result.detail,...(result.confirmed?{waiting:false}:{})});
+      if(result.confirmed && activeJob?.id===id){currentServerStop=true;controller?.abort();}
+      return {ok:result.confirmed,error:result.confirmed?undefined:result.detail};
+    }catch(error){return {ok:false,error:error.message}}finally{jobAction=false;publish();}
+  });
   register('chat:state', () => snapshot());
   register('attachments:add', async () => {
-    if (busy || settingsBusy || updating) return { ok: false, error: 'Bitte den laufenden Vorgang abschließen.' };
+    if (busy || settingsBusy || jobAction || updating) return { ok: false, error: 'Bitte den laufenden Vorgang abschließen.' };
     if (drafts.size >= 20) return { ok: false, error: 'Bitte nicht benötigte Anhänge entfernen.' };
     const profile = settings.active;
     if (!profile || profile.type === 'comfyui' || !(profile.uploads.files || profile.uploads.photos)) return { ok: false, error: 'Uploads für dieses Modell sind deaktiviert.' };
@@ -240,34 +306,46 @@ else {
     const candidate = { ...existing, ...profile };
     if (candidate.type === 'comfyui' && candidate.enabled && !workflows.summary(candidate)?.ready) throw new Error('Bitte zuerst den API-Workflow importieren und seine Eingänge zuordnen.');
     const auth = existing && normalizeOrigin(candidate.baseUrl) === existing.baseUrl ? credentials.get(existing) : { type: 'none' };
-    secureHeaders(candidate, auth); await settings.upsert(profile);
+    const checkedCandidate={...candidate,id:candidate.id??"new"};
+    if(candidate.enabled)await proveOnline(checkedCandidate);
+    secureHeaders(await wireProfile(checkedCandidate), auth); await settings.upsert(profile);
   }));
-  register('settings:toggle', (id, enabled) => changeSettings(() => {
+  register('settings:toggle', (id, enabled) => changeSettings(async () => {
     const profile = settings.db.profiles.find(p => p.id === id);
     if (enabled && profile?.type === 'comfyui' && !workflows.summary(profile)?.ready) throw new Error('Bitte zuerst den API-Workflow importieren und seine Eingänge zuordnen.');
+    if(enabled)await proveOnline(profile);
     return settings.toggle(id, enabled);
   }));
-  register('settings:select', id => changeSettings(() => settings.select(id)));
+  register('settings:select', id => changeSettings(async () => {const p=settings.db.profiles.find(p=>p.id===id);if(!p)throw Error('Verbindung nicht gefunden.');await proveOnline(p);return settings.select(id)}));
   register('settings:probe', async request => {
+    if(busy||settingsBusy||jobAction)return {ok:false,error:'Einstellungen sind während des laufenden Auftrags gesperrt.'};
     try {
       const profile = request?.id ? settings.db.profiles.find(p => p.id === request.id) : { type: request?.type ?? 'ollama', baseUrl: normalizeOrigin(request?.baseUrl), allowHttp: request?.allowHttp === true };
       if (!profile) throw new Error('Verbindung nicht gefunden.');
-      return { ok: true, models: await discoverModels(profile.baseUrl, { profile, auth: request?.id ? credentials.get(profile) : normalizeAuth(request?.auth) }) };
+      const wire=await wireProfile(profile);
+      const models=await discoverModels(wire.baseUrl, { profile:wire, auth: request?.id ? credentials.get(profile) : normalizeAuth(request?.auth) });
+      if(request?.id){profileHealth[profile.id]={state:(profile.type==='comfyui'||models.includes(profile.model))?'online':'offline',message:'API-Verbindung geprüft',identity:connectionIdentity(profile),checkedAt:Date.now()};publish();}
+      return {ok:true,models};
     }
-    catch (error) { return { ok: false, error: error.message }; }
+    catch (error) {if(request?.id && settings.db.profiles.some(p=>p.id===request.id)){profileHealth[request.id]={state:'offline',message:error.message};publish();}return { ok: false, error: error.message }; }
   });
   register('settings:server', raw => changeSettings(async () => {
     if (!raw || typeof raw.name !== 'string' || !raw.name.trim() || raw.name.length > 30) throw new Error('Bitte einen Servernamen mit maximal 30 Zeichen eingeben.');
-    const profile = { type: raw.type ?? 'auto', baseUrl: normalizeOrigin(raw.baseUrl), allowHttp: raw.allowHttp === true };
+    const profile = { ssh: validateSSH(raw.ssh), type: raw.type ?? 'auto', baseUrl: normalizeOrigin(raw.baseUrl), allowHttp: raw.allowHttp === true };
     const existing = raw.id ? settings.db.profiles.find(p => p.id === raw.id) : null;
-    if (raw.useStoredAuth && (!existing || existing.baseUrl !== profile.baseUrl || existing.authType !== raw.auth?.type)) throw new Error('Für eine neue Adresse oder Zugangsart bitte neue Zugangsdaten eingeben.');
-    const auth = raw.useStoredAuth ? credentials.get(existing) : normalizeAuth(raw.auth); secureHeaders(profile, auth);
-    const models = await inspectServer(profile, auth);
+    if (raw.useStoredAuth && (!existing || existing.baseUrl !== profile.baseUrl || existing.authType !== raw.auth?.type || apiDestination(existing)!==apiDestination(profile))) throw new Error('Für eine neue Adresse oder Zugangsart bitte neue Zugangsdaten eingeben.');
+    if(profile.ssh){
+      if(profile.ssh.authType==='password' && raw.sshSecret)profile.ssh.credentialsRef=await sshStore.add(profile.ssh,{password:raw.sshSecret});
+      else if(profile.ssh.authType!=='agent')sshStore.get(profile.ssh);
+    }
+    const auth = raw.useStoredAuth ? credentials.get(existing) : normalizeAuth(raw.auth); const wire=await wireProfile(profile);secureHeaders(wire, auth);
+    const models = await inspectServer(wire, auth);
     if (!models.length) throw new Error('Server erreichbar, aber es sind noch keine Modelle installiert.');
-    const ref = await credentials.add(profile.baseUrl, auth);
-    const oldRefs = new Set(settings.db.profiles.filter(p => p.baseUrl === profile.baseUrl).map(p => p.authRef).filter(Boolean));
+    const ref = await credentials.add(profile.baseUrl, auth, apiDestination(profile));
+    const oldRefs = new Set(settings.db.profiles.filter(p => apiDestination(p) === apiDestination(profile)).map(p => p.authRef).filter(Boolean));
     try { await settings.importServer({ ...profile, name: raw.name, models, authRef: ref, authType: auth.type, restoreRemoved: true }); }
     catch (error) { await credentials.remove(ref); throw error; }
+    for(const p of settings.db.profiles.filter(p=>p.baseUrl===profile.baseUrl && (!profile.ssh||JSON.stringify(p.ssh)===JSON.stringify(profile.ssh))))profileHealth[p.id]={state:'online',message:'SSH/Tunnel und API geprüft',identity:connectionIdentity(p),checkedAt:Date.now()};
     for (const id of oldRefs) if (!settings.db.profiles.some(p => p.authRef === id)) await credentials.remove(id);
   }));
   register('chat:new', async () => {
@@ -280,15 +358,15 @@ else {
     await store.select(id); omittedRounds = 0; notice = ''; publish(); return { ok: true };
   });
   register('chat:delete', async id => {
-    if (busy || settingsBusy || updating || closing) return { ok: false, error: 'Bitte den laufenden Vorgang abschließen.' };
+    if (busy || settingsBusy || updating || closing || shuttingDown) return { ok: false, error: 'Bitte den laufenden Vorgang abschließen.' };
     try {
-      await store.remove(id); await attachments.collectUnused(store.db.sessions.flatMap(s => s.messages), drafts);
+      await store.remove(id); await jobs.removeChats([id]); await attachments.collectUnused(store.db.sessions.flatMap(s => s.messages), drafts);
       omittedRounds = 0; notice = ''; publish(); return { ok: true };
     } catch { publish(); return { ok: false, error: 'Gespräch oder ungenutzte Anhänge konnten nicht vollständig entfernt werden.' }; }
   });
-  register('chat:cancel', () => { controller?.abort(); return { ok: true }; });
+  register('chat:cancel', () => { controller?.abort(); return { ok: true, notice:'KAIROS wartet nicht mehr. Der Server kann weiterrechnen; die Auftragszuordnung bleibt erhalten.' }; });
   register('chat:send', async (text, attachmentIds = [], imageOptions) => {
-    if (busy || updating || closing) return { ok: false, error: 'Bitte den laufenden Vorgang abschließen.' };
+    if (busy || jobAction || updating || closing) return { ok: false, error: 'Bitte den laufenden Vorgang abschließen.' };
     if (settingsBusy) return { ok: false, error: 'Die Einstellungen werden gerade gespeichert.' };
     const profile = settings.active;
     if (!profile) return { ok: false, error: 'Bitte in den Einstellungen eine KI aktivieren und für den Chat auswählen.' };
@@ -312,40 +390,47 @@ else {
       }
     }
     catch (error) { return { ok: false, error: error.message }; }
+    busy=true;publish();let wire;
+    try{await proveOnline(profile);wire=await wireProfile(profile)}catch(error){busy=false;publish();return {ok:false,error:error.message};}
     const active = store.active;
     const message = { id: randomUUID(), role: 'user', content: text, state: 'pending', createdAt: new Date().toISOString(), ...(attachmentIds.length ? { attachmentIds } : {}) };
     active.messages.push(message);
     if (active.title === 'Neues Gespräch') active.title = text.replace(/\s+/g, ' ').slice(0, 44);
     omittedRounds = context?.omittedRounds ?? 0; notice = ''; busy = true; controller = new AbortController(); publish();
-    let attachmentsPersisted = false;
+    let attachmentsPersisted = false; let job; currentServerStop=false;
+    const onSlow = detail => {imageProgress={state:"slow",message:detail}; if(job)void jobs.update(job.id,{detail}).then(publish).catch(()=>{});publish()};
     try {
       await attachments.persist(attachmentIds);
       attachmentsPersisted = true;
       attachmentIds.forEach(id => drafts.delete(id));
       await store.save();
+      job=await jobs.create(profile,active.id,message.id); activeJob=job; message.jobId=job.id; await store.save(); publish();
       let reply; let generatedIds;
       if (profile.type === 'comfyui') {
-        const result = await generateComfyImages(text, { signal: controller.signal, profile, auth: credentials.get(profile), entry: workflows.get(profile), options: imageOptions,
-          onProgress: progress => { imageProgress = progress; publish(); } });
-        for (const image of result.images) { validateImage(image); attachments.items.set(image.id, image); }
-        generatedIds = result.images.map(image => image.id); await attachments.persist(generatedIds); reply = `Hier ist dein Bild${generatedIds.length > 1 ? 'ergebnis' : ''}.${result.seed === undefined ? '' : ' Seed: ' + result.seed}`;
+        const result = await generateComfyImages(text, { signal: controller.signal, profile:wire, auth: credentials.get(profile), clientId:job.clientId, onSlow,
+          onAccepted: async accepted=>{job=await jobs.update(job.id,{...accepted,state:"queued",recoverable:true});activeJob=job;publish()}, entry: workflows.get(profile), options: imageOptions,
+          onProgress: progress => { imageProgress = progress; if(job && ["queued","running"].includes(progress.state))void jobs.update(job.id,{state:progress.state,detail:progress.message}).then(publish).catch(()=>{});publish(); } });
+        await applyRecovered(job,result); connection={state:'online',message:'Ergebnis empfangen'};return {ok:true,submitted:true};
       } else if (profile.type === 'image-api') {
-        const image = await generateImage(text, { signal: controller.signal, profile, auth: credentials.get(profile), references: attachmentIds.map(id => attachments.get(id)) });
+        const image = await generateImage(text, { signal: controller.signal, profile:wire, auth: credentials.get(profile), onSlow, references: attachmentIds.map(id => attachments.get(id)) });
         validateImage(image); attachments.items.set(image.id, image); await attachments.persist([image.id]); generatedIds = [image.id]; reply = 'Hier ist dein Bild.';
-      } else reply = await (profile.type === 'openai-chat' ? sendOpenaiChat : sendChat)(context.messages, { signal: controller.signal, profile, auth: credentials.get(profile) });
+      } else reply = await (profile.type === 'openai-chat' ? sendOpenaiChat : sendChat)(context.messages, { signal: controller.signal, profile:wire, auth: credentials.get(profile), onSlow });
       imageProgress = null; message.state = 'complete';
-      active.messages.push({ id: randomUUID(), role: 'assistant', content: reply, model: profile.model, providerName: profile.name, state: 'complete', createdAt: new Date().toISOString(), ...(generatedIds ? { attachmentIds: generatedIds } : {}) });
-      try { await store.save(); } catch { notice = 'Die Antwort ist da, aber der Verlauf konnte nicht gespeichert werden.'; }
+      active.messages.push({ id: job.id, jobId:job.id, role: 'assistant', content: reply, model: profile.model, providerName: profile.name, state: 'complete', createdAt: new Date().toISOString(), ...(generatedIds ? { attachmentIds: generatedIds } : {}) });
+      try { await store.save(); } catch { throw Error('Die Antwort ist da, aber der Verlauf konnte nicht gespeichert werden. Bitte KAIROS geöffnet lassen.'); }
+      await jobs.update(job.id,{state:'completed',waiting:false,detail:'Antwort im Gespräch gespeichert.'});
       connection = { state: 'online', message: `Mit ${profile.name} verbunden` };
       return { ok: true, submitted: true };
     } catch (error) {
       if (!attachmentsPersisted) delete message.attachmentIds;
-      message.state = controller.signal.aborted ? 'cancelled' : 'failed';
+      const confirmedStop = currentServerStop || error.jobState==='cancelled' || job && jobs.get(job.id).state==='cancelled';
+      message.state = confirmedStop ? 'cancelled' : error.jobState==='failed' ? 'failed' : 'unknown';
+      if(job)try{await jobs.update(job.id,{state:confirmedStop?'cancelled':error.jobState??'unknown',waiting:false,detail:confirmedStop?'Serverseitiger Abbruch bestätigt.':error.message})}catch{};
       notice = error.message;
       try { await store.save(); } catch { notice += ' Der Verlauf konnte nicht gespeichert werden.'; }
       if (/nicht erreichbar/.test(error.message)) connection = { state: 'offline', message: `${profile.name} ist gerade nicht erreichbar` };
       return { ok: false, submitted: attachmentsPersisted, error: notice };
-    } finally { busy = false; imageProgress = null; controller = undefined; publish(); }
+    } finally { busy = false; imageProgress = null; controller = undefined; activeJob=undefined;currentServerStop=false; publish(); }
   });
 
   await window.loadFile(join(root, 'ui/index.html'));
@@ -355,7 +440,7 @@ else {
   if (verify) {
     try {
       const verifier = verifyUpdateOnly ? (await import('./verify-update.mjs')).verifyUpdate : verifyApplication;
-      const report = await verifier({ root, dataDir, window, store, settings, cipher, credentials, workflows, attachments, drafts, updates, publish, snapshot });
+      const report = await verifier({ root, dataDir, window, store, settings, cipher, credentials, workflows, attachments, drafts, updates, jobs, publish, snapshot });
       console.log(JSON.stringify(report));
       app.quit();
     } catch (error) { console.error(error); app.exit(1); }

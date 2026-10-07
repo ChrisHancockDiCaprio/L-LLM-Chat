@@ -1,9 +1,10 @@
+import { generationFetch, delayedAnswer, unknownOutcome } from './generation-transport.mjs';
 import { createOllamaRequest } from './ollama-request.mjs';
 import { normalizeOrigin } from './settings-store.mjs';
 import { secureHeaders, httpError } from './connection-security.mjs';
 
 // Codex-owned transport. The separate request builder is the Qwen contribution.
-export async function sendChat(messages, { signal, profile, auth } = {}) {
+export async function sendChat(messages, { signal, profile, auth, onSlow } = {}) {
   if (!profile || !profile.enabled || profile.type !== 'ollama') throw new Error('Diese KI ist nicht aktiviert.');
   const baseUrl = normalizeOrigin(profile.baseUrl);
   const model = profile.model;
@@ -12,10 +13,9 @@ export async function sendChat(messages, { signal, profile, auth } = {}) {
   if (body.messages.some(m => m.images?.length) && !profile.capabilities?.includes('vision')) throw new Error('Das ausgewählte Modell unterstützt keine Bildeingaben.');
   body.model = model;
   const headers = secureHeaders(profile, auth);
-  const deadline = AbortSignal.timeout(240000);
-  const combined = signal ? AbortSignal.any([deadline, signal]) : deadline;
+  const combined = signal ?? new AbortController().signal; const clearSlow = delayedAnswer(onSlow);
   try {
-    const response = await fetch(`${baseUrl}/api/chat`, {
+    const response = await generationFetch(`${baseUrl}/api/chat`, {
       method: 'POST', headers,
       body: JSON.stringify({ ...body, options: profile.options ?? { num_ctx: 8192, num_predict: 2048, temperature: 0.7 } }), signal: combined, redirect: 'error',
     });
@@ -36,9 +36,8 @@ export async function sendChat(messages, { signal, profile, auth } = {}) {
     }
     return data.message.content;
   } catch (error) {
-    if (signal?.aborted) throw new Error('Die Anfrage wurde abgebrochen.', { cause: error });
-    if (deadline.aborted) throw new Error('Die KI hat innerhalb von 240 Sekunden nicht vollständig geantwortet.', { cause: error });
-    if (error instanceof TypeError) throw new Error('Ollama ist nicht erreichbar. Bitte die Verbindung prüfen.', { cause: error });
-    throw error;
-  }
+    if (signal?.aborted) throw new Error('Nicht mehr gewartet. ' + unknownOutcome);
+    if (error instanceof TypeError) throw new Error('Ollama ist nicht erreichbar. Bitte die Verbindung prüfen. ' + unknownOutcome, { cause: error });
+    throw new Error(error.message + ' ' + unknownOutcome);
+  } finally { clearSlow(); }
 }

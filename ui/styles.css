@@ -187,3 +187,7 @@ dialog::backdrop { background: #15271c60; backdrop-filter: blur(3px); }
 #image-options .model-options-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 #workflow-mappings label { display: block; margin: 12px 0 6px; font-size: 12px; }
 .image-download { align-self: start; }
+
+#job-list { max-height: 180px; overflow-y: auto; flex-shrink: 0; }
+.job-card { margin: 6px 18px; padding: 8px 12px; font-size: 12px; }
+.job-card p { margin: 4px 0; }

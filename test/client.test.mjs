@@ -82,20 +82,9 @@ test('caller cancellation reaches fetch', async () => {
   });
 });
 
-test('request deadline is 240 seconds and reaches fetch', async () => {
-  const original = AbortSignal.timeout;
-  const deadline = new AbortController();
-  let configured;
-  AbortSignal.timeout = ms => { configured = ms; return deadline.signal; };
-  try {
-    await withFetch(async (_url, init) => new Promise((_, reject) => {
-      init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
-      deadline.abort(new DOMException('Deadline', 'TimeoutError'));
-    }), async () => {
-      await assert.rejects(() => sendChat(messages()));
-      assert.equal(configured, 240000);
-    });
-  } finally { AbortSignal.timeout = original; }
+test('generation does not set an automatic deadline',async()=>{
+ const original=AbortSignal.timeout;let calls=0;AbortSignal.timeout=()=>{calls++;throw Error('No generation deadline allowed')};
+ try{await withFetch(async()=>response(),async()=>assert.equal(await sendChat(messages()),'Antwort'));assert.equal(calls,0)}finally{AbortSignal.timeout=original}
 });
 
 test('network failure stays an error without retry', async () => {

@@ -1,3 +1,4 @@
+import {trustedTunnel} from './tunnel-security.mjs';
 import { isIP } from 'node:net';
 
 export function normalizeOrigin(value) {
@@ -31,10 +32,11 @@ export function secureHeaders(profile, rawAuth) {
   const auth = normalizeAuth(rawAuth);
   const url = new URL(origin);
   if (url.protocol !== 'https:') {
-    if (auth.type !== 'none') throw new Error('Zugangsdaten werden ausschließlich über HTTPS übertragen.');
+    if (auth.type !== 'none' && !trustedTunnel(profile)) throw new Error('Zugangsdaten werden ausschließlich über HTTPS übertragen.');
     if (profile.allowHttp !== true || !privateAddress(url.hostname)) throw new Error('HTTPS ist erforderlich. HTTP darf nur ausdrücklich für eine private IP-Adresse im Heimnetz freigegeben werden.');
   }
   const headers = { 'Content-Type': 'application/json' };
+  if(trustedTunnel(profile))headers.Host=(profile.ssh.targetHost==='::1'?'[::1]':profile.ssh.targetHost)+':'+profile.ssh.targetPort;
   if (auth.type === 'bearer') headers.Authorization = `Bearer ${auth.token}`;
   if (auth.type === 'basic') headers.Authorization = `Basic ${Buffer.from(`${auth.username}:${auth.password}`, 'utf8').toString('base64')}`;
   return headers;

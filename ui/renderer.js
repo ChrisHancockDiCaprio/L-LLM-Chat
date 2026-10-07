@@ -2,7 +2,8 @@ const api = window.qwenChat;
 const $ = selector => document.querySelector(selector);
 let state; let cancelling = false; let probing = false; let draftAttachments = []; let deletion;
 let appliedRepository;
-let imageProfile;
+let imageProfile; let trustId;
+const jobLabels={queued:"Wartet",running:"Läuft",completed:"Abgeschlossen",failed:"Fehlgeschlagen",cancelled:"Serverseitig abgebrochen",missing:"Nicht mehr auffindbar",unknown:"Status unbekannt"};
 const comfyFields = { prompt: 'Prompt', negativePrompt: 'Negative Prompt', width: 'Breite', height: 'Höhe', steps: 'Schritte', seed: 'Seed', cfg: 'CFG' };
 const input = $('#message-input');
 function renderAttachments() {
@@ -28,6 +29,26 @@ const time = iso => new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: 
 const date = iso => new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'short', timeZone: 'Europe/Berlin' }).format(new Date(iso));
 
 function error(message) { $('#notice').textContent = message; $('#notice').hidden = !message; }
+function renderJobs() {
+  $('#job-list').replaceChildren(...(state.jobs??[]).filter(j=>j.chatId===state.activeId && j.state!=='completed').map(job=>{
+    const card=document.createElement('div');card.className='security-card job-card';
+    const title=document.createElement('strong');title.textContent=job.providerName+' · '+jobLabels[job.state];
+    const detail=document.createElement('p');detail.textContent=job.detail;
+    card.append(title,detail);
+    if(!job.recoverable) {const hint=document.createElement('small');hint.textContent='Kein serverseitiger Ergebnis-Wiederabruf nachgewiesen. Die lokale Auftragsnummer ist keine Server-ID.';card.append(hint)}
+    else if(!job.bindingOK) {const hint=document.createElement('small');hint.textContent='Verbindung wurde geändert oder gelöscht. Kein Abruf auf einem anderen Server.';card.append(hint)}
+    else {
+      const check=document.createElement('button');check.className='secondary-button';check.textContent='Status prüfen / Ergebnis abrufen';check.disabled=state.busy||state.settingsBusy||state.jobAction;
+      check.addEventListener('click',async()=>{const result=await api.checkJob(job.id);if(!result.ok)error(result.error)});card.append(check);
+      if(job.state==='queued') {const stop=document.createElement('button');stop.className='secondary-button';stop.textContent='Wartenden Auftrag entfernen';stop.disabled=state.settingsBusy||state.jobAction;
+        stop.addEventListener('click',async()=>{const result=await api.stopJob(job.id);if(!result.ok)error(result.error)});card.append(stop)}
+    }
+    return card;
+  }));
+  const pending=state.tunnels?.pending?.[0];
+  if(pending){trustId=pending.id;$('#ssh-trust-host').textContent=pending.host+':'+pending.port;$('#ssh-trust-fingerprint').textContent=pending.fingerprint;if(!$('#ssh-trust-dialog').open)$('#ssh-trust-dialog').showModal()}
+  else if($('#ssh-trust-dialog').open){trustId=undefined;$('#ssh-trust-dialog').close()}
+}
 function render(next) {
   state = next;
   if (!state.busy) cancelling = false;
@@ -63,7 +84,7 @@ function render(next) {
   $('#chat-title').textContent = active.title;
   $('#delete-chat').disabled = state.busy || state.settingsBusy;
   $('#connection-check').className = `connection ${state.connection.state}`;
-  $('#connection-label').textContent = state.connection.state === 'online' ? (profile?.baseUrl.startsWith('http:') ? 'HTTP · Heimnetz' : 'HTTPS · Verbunden') : state.connection.message;
+  $('#connection-label').textContent = state.connection.state === 'online' ? (profile?.ssh?.enabled ? 'SSH-Tunnel · API verbunden' : profile?.baseUrl.startsWith('http:') ? 'HTTP · Heimnetz' : 'HTTPS · Verbunden') : state.connection.message;
   $('#connection-check').title = `${state.connection.message} · Klicken zum erneuten Prüfen`;
   $('#connection-check').disabled = state.connection.state === 'checking' || !profile || state.settingsBusy;
   $('#new-chat').disabled = state.busy;
@@ -104,7 +125,7 @@ function render(next) {
     }
     if (message.state !== 'complete') {
       const status = document.createElement('div'); status.className = 'message-state';
-      status.textContent = { pending: 'Wird beantwortet …', failed: 'Nicht beantwortet · Nachricht kann erneut gesendet werden', cancelled: 'Anfrage abgebrochen' }[message.state];
+      status.textContent = { pending: 'Wird beantwortet …', failed: 'Nicht beantwortet · Nachricht kann erneut gesendet werden', cancelled: 'Abbruch bestätigt bzw. Altbestand', unknown:'Ausgang unbekannt · Server kann weiterrechnen' }[message.state];
       main.append(status);
     }
     row.append(avatar, main); return row;
@@ -118,6 +139,7 @@ function render(next) {
   updateSend();
   renderSettings();
   renderUpdates();
+  renderJobs();
   $('#conversation').scrollTop = $('#conversation').scrollHeight;
 }
 function renderUpdates() {
@@ -145,7 +167,7 @@ function updateSend() {
   const profile = state?.settings.profiles.find(p => p.id === state.settings.activeId);
   $('#send-button').disabled = cancelling || (!busy && (!input.value.trim() || !state?.settings.activeId || state?.settingsBusy));
   $('#send-button').classList.toggle('cancel', busy);
-  $('#send-label').textContent = busy ? (cancelling ? 'Abbrechen …' : 'Abbrechen') : ['image-api','comfyui'].includes(profile?.type) ? 'Bild erzeugen' : 'Senden';
+  $('#send-label').textContent = busy ? (cancelling ? 'Warten wird beendet …' : 'Nicht mehr warten') : ['image-api','comfyui'].includes(profile?.type) ? 'Bild erzeugen' : 'Senden';
   $('#send-icon').textContent = busy ? '×' : '↗';
 }
 input.addEventListener('input', updateSend);
@@ -165,7 +187,7 @@ $('#chat-form').addEventListener('submit', async event => {
     const imageOptions = $('#image-options').hidden ? undefined : Object.fromEntries([...$('#image-fields').querySelectorAll('input')].map(c => [c.dataset.field, c.type === 'number' ? Number(c.value) : c.value]));
     const result = await api.send(text, draftAttachments.map(a => a.id), imageOptions);
     if (result.ok || result.submitted) { draftAttachments = []; renderAttachments(); }
-    if (!result.ok) { sendError = result.error; if (!input.value) input.value = text; }
+    if (!result.ok) { sendError = result.error; if (!result.submitted && !input.value) input.value = text; }
   } catch { sendError = 'Die Nachricht konnte nicht gesendet werden.'; if (!input.value) input.value = text; }
   finally { render(await api.state()); if (sendError) error(sendError); input.focus(); }
 });
@@ -190,7 +212,7 @@ async function settingsAction(action, success = '') {
   catch { settingsFeedback('Die Einstellungen konnten nicht geändert werden.'); return { ok: false }; }
 }
 function renderSettings() {
-  const locked = state.busy || state.settingsBusy;
+  const locked = state.busy || state.settingsBusy || state.jobAction;
   $('#vault-location').textContent = state.security?.vaultDirectory ?? '';
   $('#add-server').disabled = locked;
   $('#add-profile').disabled = locked;
@@ -209,11 +231,12 @@ function renderSettings() {
     const model = document.createElement('span'); model.textContent = profile.model;
     const address = document.createElement('small'); address.textContent = profile.baseUrl;
     const protection = document.createElement('small'); protection.className = profile.baseUrl.startsWith('http:') ? 'transport-warning' : '';
-    protection.textContent = `${profile.baseUrl.startsWith('https:') ? 'HTTPS · verschlüsselte Übertragung' : 'HTTP · unverschlüsselte Heimnetz-Ausnahme'} · ${profile.authType === 'none' ? 'Ohne Zugangsdaten' : 'Zugang im Tresor'}`;
+    protection.textContent = profile.ssh?.enabled ? 'SSH · verschlüsselter Tunnel · API-Ziel '+profile.ssh.targetHost+':'+profile.ssh.targetPort : `${profile.baseUrl.startsWith('https:') ? 'HTTPS · verschlüsselte Übertragung' : 'HTTP · unverschlüsselte Heimnetz-Ausnahme'} · ${profile.authType === 'none' ? 'Ohne Zugangsdaten' : 'Zugang im Tresor'}`;
     const capabilities = document.createElement('small'); capabilities.textContent = `${profile.capabilities?.length ? 'Gemeldete Fähigkeiten: ' + profile.capabilities.join(', ') : 'Fähigkeiten noch nicht abgefragt'}${profile.contextLimit ? ' · Kontextgrenze: ' + profile.contextLimit.toLocaleString('de-DE') + ' Tokens' : ''}`;
-    details.append(title, model, address, protection, capabilities);
+    const health=document.createElement('small');health.textContent='API: '+(state.profileHealth[profile.id]?.message??'Noch nicht geprüft');details.append(title, model, address, protection, capabilities,health);
+    const tunnel=state.tunnels?.connections?.find(t=>t.profileIds.includes(profile.id));if(tunnel){const info=document.createElement('small');info.textContent='SSH: '+tunnel.ssh+' · Tunnel: '+tunnel.tunnel+' · '+tunnel.detail;details.append(info)}
     const toggleLabel = document.createElement('label'); toggleLabel.className = 'toggle-label';
-    const toggle = document.createElement('input'); toggle.type = 'checkbox'; toggle.className = 'profile-toggle'; toggle.id = `toggle-${profile.id}`; toggle.checked = profile.enabled; toggle.disabled = locked;
+    const toggle = document.createElement('input'); toggle.type = 'checkbox'; toggle.className = 'profile-toggle'; toggle.id = `toggle-${profile.id}`; toggle.checked = profile.enabled; toggle.disabled = locked || state.profileHealth[profile.id]?.state!=='online';
     toggle.setAttribute('aria-label', `${profile.name} in dieser App aktivieren`);
     const caption = document.createElement('span'); caption.textContent = profile.enabled ? 'Aktiviert' : 'Deaktiviert';
     toggleLabel.append(toggle, caption);
@@ -226,7 +249,7 @@ function renderSettings() {
     use.addEventListener('click', () => settingsAction(() => api.selectProfile(profile.id), 'Auswahl gespeichert. Sie gilt ab der nächsten Nachricht.'));
     const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'profile-edit secondary-button'; edit.dataset.profile = profile.id; edit.textContent = 'Bearbeiten'; edit.disabled = locked;
     edit.addEventListener('click', () => editProfile(profile));
-    const test = document.createElement('button'); test.type = 'button'; test.className = 'secondary-button'; test.textContent = 'Prüfen'; test.disabled = locked || !profile.enabled;
+    const test = document.createElement('button'); test.type = 'button'; test.className = 'secondary-button'; test.textContent = 'Prüfen'; test.disabled = locked;
     test.addEventListener('click', async () => {
       test.disabled = true;
       const result = await settingsAction(() => api.probeServer({ id: profile.id }));
@@ -246,14 +269,15 @@ function renderSettings() {
       note.textContent = `ComfyUI-Bild-Backend · ${profile.serverInfo?.ggufAvailable ? 'GGUF-Knoten erkannt' : 'GGUF-Knoten nicht gemeldet'} · ${profile.serverInfo?.modelFiles?.length ?? 0} Modelldateien gemeldet. ${imported ? `Workflow: ${imported.name} (${imported.nodeCount} Knoten). ${imported.ready ? 'Zuordnung gespeichert.' : 'Bitte Eingänge zuordnen.'}` : 'Noch kein API-Workflow importiert.'}`;
       const configure = document.createElement('button'); configure.type = 'button'; configure.className = 'secondary-button workflow-configure'; configure.dataset.profile = profile.id; configure.textContent = 'Workflow zuordnen'; configure.disabled = locked || !imported; configure.addEventListener('click', () => editWorkflow(profile)); actions.append(configure);
       details.append(note); test.disabled = locked;
-      toggle.disabled = locked || !imported?.ready;
+      toggle.disabled = locked || !imported?.ready || state.profileHealth[profile.id]?.state!=='online';
     }
     actions.append(use, edit, test, remove); card.append(head, actions); return card;
   });
+  const serverIdentity = p => p.ssh?.enabled ? JSON.stringify([p.ssh.host,p.ssh.port,p.ssh.username,p.ssh.targetHost,p.ssh.targetPort,p.ssh.targetTls]) : p.baseUrl;
   const grouped = []; const origins = new Set();
   state.settings.profiles.forEach((profile, index) => {
-    if (!origins.has(profile.baseUrl)) {
-      origins.add(profile.baseUrl);
+    if (!origins.has(serverIdentity(profile))) {
+      origins.add(serverIdentity(profile));
       const header = document.createElement('div'); header.className = 'server-group-heading';
       const name = document.createElement('strong'); name.textContent = profile.baseUrl;
       const refresh = document.createElement('button'); refresh.type = 'button'; refresh.className = 'secondary-button'; refresh.textContent = 'Modelle & Zugang aktualisieren'; refresh.disabled = locked;
@@ -263,7 +287,7 @@ function renderSettings() {
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'server-remove secondary-button danger-button'; remove.dataset.profile = profile.id; remove.textContent = 'Server löschen'; remove.disabled = locked; remove.addEventListener('click', () => confirmDeletion(profile, true));
       const actions = document.createElement('div'); actions.className = 'server-actions'; actions.append(refresh, edit, remove);
       header.append(name, actions); grouped.push(header);
-      state.settings.profiles.forEach((p, i) => { if (p.baseUrl === profile.baseUrl) grouped.push(cards[i]); });
+      state.settings.profiles.forEach((p, i) => { if (serverIdentity(p) === serverIdentity(profile)) grouped.push(cards[i]); });
     }
   });
   $('#profile-list').replaceChildren(...grouped);
@@ -334,7 +358,7 @@ function editProfile(profile) {
   settingsFeedback(''); $('#profile-name').focus();
   $('#profile-form').scrollIntoView({ block: 'nearest' });
 }
-function clearServerSecret() { $('#server-secret').value = ''; $('#server-user').value = ''; }
+function clearServerSecret() { $('#ssh-secret').value=''; $('#ssh-passphrase').value=''; $('#server-secret').value = ''; $('#server-user').value = ''; }
 function authFields() {
   const auth = $('#server-auth').value;
   $('#server-user-field').hidden = auth !== 'basic'; $('#server-secret-field').hidden = auth === 'none';
@@ -346,6 +370,7 @@ function editServer(profile) {
   $('#server-type').value = profile?.type ?? 'auto';
   $('#server-url').value = profile?.baseUrl ?? ''; $('#server-auth').value = profile?.authType ?? 'none';
   $('#server-http').checked = profile?.allowHttp ?? false; $('#server-feedback').textContent = '';
+  const ssh=profile?.ssh;$('#ssh-enabled').checked=!!ssh?.enabled;$('#ssh-host').value=ssh?.host??'192.168.0.175';$('#ssh-port').value=ssh?.port??22;$('#ssh-user').value=ssh?.username??'hancock';$('#ssh-target').value=ssh?.targetHost??'127.0.0.1';$('#ssh-target-port').value=ssh?.targetPort??8000;$('#ssh-local-port').value=ssh?.localPort??18000;$('#ssh-auth').value=ssh?.authType??'agent';$('#ssh-key-ref').value=ssh?.credentialsRef??'';$('#ssh-target-tls').checked=ssh?.targetTls??false;sshFields();
   authFields(); $('#server-name').focus(); $('#server-form').scrollIntoView({ block: 'nearest' });
 }
 function settingsTab(tab) {
@@ -398,11 +423,13 @@ $('#server-form').addEventListener('submit', async event => {
     type: $('#server-type').value,
     id: $('#server-id').value || undefined, name: $('#server-name').value, baseUrl: $('#server-url').value, allowHttp: $('#server-http').checked,
     auth: { type, token: $('#server-secret').value, username: $('#server-user').value, password: $('#server-secret').value },
+    ssh: sshConfig(), sshSecret: $('#ssh-secret').value,
     useStoredAuth: Boolean($('#server-id').value && type !== 'none' && !$('#server-secret').value),
   };
   clearServerSecret(); $('#server-feedback').textContent = 'Server und Modelle werden geprüft …';
   const result = await settingsAction(() => api.addServer(request), 'Server geprüft. Die Modelle werden automatisch aufgelistet. Neue Modelle kannst du jetzt aktivieren.');
   // Drop credential references held by this form after IPC has completed.
+  request.sshSecret='';
   request.auth.token = ''; request.auth.password = ''; request.auth.username = '';
   $('#server-feedback').textContent = result.ok ? '' : result.error ?? 'Prüfung fehlgeschlagen.';
   if (result.ok) $('#server-form').hidden = true;
@@ -435,5 +462,12 @@ $('#profile-form').addEventListener('submit', async event => {
   }), 'Verbindung gespeichert.');
   if (result.ok) $('#profile-form').hidden = true;
 });
+function sshConfig(){return $('#ssh-enabled').checked?{enabled:true,host:$('#ssh-host').value,port:Number($('#ssh-port').value),username:$('#ssh-user').value,targetHost:$('#ssh-target').value,targetPort:Number($('#ssh-target-port').value),localPort:Number($('#ssh-local-port').value),authType:$('#ssh-auth').value,credentialsRef:$('#ssh-key-ref').value||null,targetTls:$('#ssh-target-tls').checked}:null}
+function sshFields(){const enabled=$('#ssh-enabled').checked;$('#ssh-fields').hidden=!enabled;$('#ssh-key-import').hidden=$('#ssh-auth').value!=='key';$('#ssh-passphrase-label').hidden=$('#ssh-auth').value!=='key';$('#ssh-secret-label').hidden=$('#ssh-auth').value!=='password';if(enabled&&!$('#server-url').value)$('#server-url').value='http://127.0.0.1:18000';}
+$('#ssh-enabled').addEventListener('change',sshFields);$('#ssh-auth').addEventListener('change',()=>{$('#ssh-secret').value='';$('#ssh-key-ref').value='';sshFields()});
+$('#ssh-key-import').addEventListener('click',async()=>{const config=sshConfig();const result=await settingsAction(()=>api.importSSHKey({...config,passphrase:$('#ssh-passphrase').value}));$('#ssh-passphrase').value='';if(result.ok&&result.credentialsRef)$('#ssh-key-ref').value=result.credentialsRef});
+$('#ssh-trust-yes').addEventListener('click',async()=>{const id=trustId;if(id){const r=await api.trustSSHHost(id,true);if(!r.ok)settingsFeedback(r.error)}});
+$('#ssh-trust-no').addEventListener('click',()=>{if(trustId)void api.trustSSHHost(trustId,false)});
+$('#ssh-trust-dialog').addEventListener('cancel',event=>{event.preventDefault();if(trustId)void api.trustSSHHost(trustId,false)});
 api.onState(render);
 api.state().then(render).catch(() => error('Das Programm konnte nicht initialisiert werden.'));

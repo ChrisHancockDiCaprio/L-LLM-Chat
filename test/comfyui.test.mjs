@@ -38,10 +38,11 @@ test('native prompt/history/view flow waits, fetches only mapped outputs and ret
     urls.push(url); assert.equal(init.redirect, 'error'); assert.equal(init.headers.Authorization, 'Bearer FAKE-COMFY-KEY');
     if (url.endsWith('/prompt')) { const body = JSON.parse(init.body); assert.equal(body.prompt['4'].inputs.seed, 7); assert.match(body.client_id, /^[a-f0-9-]{36}$/); return json({ prompt_id: 'prompt-id', node_errors: {} }); }
     if (url.endsWith('/history/prompt-id')) return ++polls === 1 ? json({}) : history([image]);
+    if (url.endsWith('/queue'))return json({queue_running:[[0,'prompt-id']],queue_pending:[]});
     const parsed = new URL(url); assert.equal(parsed.pathname, '/view'); assert.equal(parsed.searchParams.get('filename'), image.filename); assert.equal(parsed.searchParams.get('type'), 'output'); return new Response(png);
   }, () => generateComfyImages('hello', { profile, auth: { type: 'bearer', token: 'FAKE-COMFY-KEY' }, entry, pollInterval: 1, onProgress: p => progress.push(p.state) }));
   assert.equal(result.images[0].base64, png.toString('base64')); assert.equal(result.seed, 7);
-  assert.deepEqual(progress, ['submitting', 'queued', 'receiving']); assert.equal(urls.length, 4); assert.ok(urls.every(u => !u.includes('/v1') && !u.includes('/api/')));
+  assert.deepEqual(progress, ['submitting', 'queued', 'running', 'receiving']); assert.equal(urls.length, 5); assert.ok(urls.every(u => !u.includes('/v1') && !u.includes('/api/')));
 });
 test('ComfyUI rejects execution errors and unsafe/oversized/nonimage outputs without fetching foreign URLs', async () => {
   for (const descriptor of [{ ...image, filename: '../bad.png' }, { ...image, subfolder: '../private' }, { ...image, type: 'temp' }]) {
@@ -53,7 +54,7 @@ test('ComfyUI rejects execution errors and unsafe/oversized/nonimage outputs wit
 });
 test('ComfyUI cancellation stops polling and HTTP secrets never reach network', async () => {
   const controller = new AbortController(); let calls = 0;
-  await mockFetch(async url => { calls++; if (url.endsWith('/prompt')) return json({ prompt_id: 'prompt-id' }); controller.abort(); return json({}); }, async () => assert.rejects(() => generateComfyImages('x', { profile, entry, signal: controller.signal }), /weiterlaufen/));
+  await mockFetch(async url => { calls++; if (url.endsWith('/prompt')) return json({ prompt_id: 'prompt-id' }); controller.abort(); return json({}); }, async () => assert.rejects(() => generateComfyImages('x', { profile, entry, signal: controller.signal }), /möglicherweise weiter/));
   assert.equal(calls, 2); calls = 0;
   await mockFetch(async () => { calls++; }, async () => assert.rejects(() => generateComfyImages('x', { profile: { ...profile, baseUrl: 'http://192.168.0.175:8188', allowHttp: true }, entry, auth: { type: 'bearer', token: 'FAKE' } }), /HTTPS/)); assert.equal(calls, 0);
 });

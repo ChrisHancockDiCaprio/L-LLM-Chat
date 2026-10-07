@@ -66,3 +66,5 @@ Quellen: [Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-
 ## Bilder und Dateien
 
 Bilder mit Vision-Modellen besprechen, Text-/Codedateien anhängen und einen Bildgenerator als eigene Serverart verbinden. Ergebnisse erscheinen direkt im Chat; Anhänge liegen separat verschlüsselt im Tresor. Einrichtung, Grenzen und der offene Ollama-Vision-Serverfehler: **BILDER-UND-DATEIEN.md**.
+
+SSH-Tunnel und Auftragswiederabruf ab 0.3.1: siehe [SSH-UND-AUFTRAEGE.md](SSH-UND-AUFTRAEGE.md).

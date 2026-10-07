@@ -109,3 +109,11 @@ test('API workflows are encrypted, validated, restored and removed only when the
   await restored.collectUnused([{ ...profile, id: "image-profile", type: 'comfyui' }]); assert.ok(restored.summary({...profile,id:"image-profile",type:"comfyui"}));
   await restored.collectUnused([]); assert.equal(restored.summary({...profile,id:"image-profile",type:"comfyui"}), null);
 });
+
+test('different SSH targets sharing a local URL remain separate and deleting one server keeps the other',async()=>{
+ const {settings}=await stores();const ssh={enabled:true,host:'192.168.0.175',port:22,username:'hancock',authType:'agent',targetHost:'127.0.0.1',targetPort:8000};
+ const input={name:'SSH',baseUrl:'http://127.0.0.1:18000',allowHttp:true,type:'openai-chat',models:[{name:'same-model',type:'openai-chat'}],authType:'none'};
+ await settings.importServer({...input,ssh});await settings.importServer({...input,ssh:{...ssh,targetPort:9000}});assert.equal(settings.db.profiles.length,2);
+ const first=settings.db.profiles[0];await settings.remove(first.id,true);assert.equal(settings.db.profiles.length,1);assert.equal(settings.db.profiles[0].ssh.targetPort,9000);
+ await settings.load();await settings.importServer({...input,ssh});assert.equal(settings.db.profiles.length,1);
+});

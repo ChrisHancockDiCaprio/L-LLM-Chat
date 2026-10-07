@@ -1,3 +1,4 @@
+import { delayedAnswer, unknownOutcome } from './generation-transport.mjs';
 import { normalizeOrigin, secureHeaders, httpError } from './connection-security.mjs';
 import { readServerJson } from './openai-client.mjs';
 import { randomUUID, randomInt } from 'node:crypto';
@@ -115,47 +116,87 @@ function outputQuery(image) {
   return new URLSearchParams({ filename: image.filename, subfolder, type: 'output' });
 }
 
-export async function generateComfyImages(prompt, { profile, auth, entry, options, signal, onProgress = () => {}, pollInterval = 1000 } = {}) {
-  if (profile?.type !== 'comfyui' || !profile.enabled) throw new Error('Bitte das ComfyUI-Bild-Backend aktivieren.');
-  const prepared = prepareComfyWorkflow(entry, prompt, options);
+
+function comfyRequest(profile, auth, signal) {
   const headers = secureHeaders(profile, auth); const origin = normalizeOrigin(profile.baseUrl);
-  const deadline = AbortSignal.timeout(20 * 60 * 1000);
-  const combined = AbortSignal.any([deadline, ...(signal ? [signal] : [])]);
-  async function request(url, init = {}) {
-    const response = await fetch(url, { ...init, headers, redirect: 'error', signal: AbortSignal.any([combined, AbortSignal.timeout(30000)]) });
+  return async (path, init = {}) => {
+    signal?.throwIfAborted();
+    const response = await fetch(origin + path, { ...init, headers, redirect: 'error', signal: AbortSignal.any([AbortSignal.timeout(30000), ...(signal ? [signal] : [])]) });
     if (!response.ok) { await response.body?.cancel(); throw new Error(httpError(response.status)); }
     return response;
+  };
+}
+function jobId(job) { if (!job?.serverId || !/^[A-Za-z0-9_-]{1,100}$/.test(job.serverId)) throw Error('Server-Auftrags-ID fehlt. Ein neuer Auftrag wird nicht gesendet.'); return job.serverId; }
+export async function queryComfyJob(job, {profile,auth,signal} = {}) {
+  const id=jobId(job);const request=comfyRequest(profile,auth,signal);
+  const history=await readServerJson(await request('/history/'+encodeURIComponent(id)),4*1024*1024); const result=history?.[id];
+  if(result) {
+    const messages=result.status?.messages ?? [];
+    if(messages.some(m=>m?.[0]==='execution_interrupted')) return {state:'cancelled',detail:'Serverseitiger Abbruch bestätigt.'};
+    if(result.status?.status_str==='error' || messages.some(m=>m?.[0]==='execution_error')) return {state:'failed',detail:'ComfyUI meldet einen fehlgeschlagenen Auftrag.'};
+    if(result.status?.completed===true || result.status?.status_str==='success') return {state:'completed',detail:'Ergebnis in der Serverhistorie vorhanden.',result};
   }
-  try {
-    onProgress({ state: 'submitting', message: 'Bild-Workflow wird an ComfyUI gesendet …' });
-    const queued = await readServerJson(await request(`${origin}/prompt`, { method: 'POST', body: JSON.stringify({ prompt: prepared.nodes, client_id: randomUUID() }) }));
-    if (typeof queued.prompt_id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(queued.prompt_id) || Object.keys(queued.node_errors ?? {}).length) throw new Error('ComfyUI hat den Workflow nicht angenommen. Nodes und Modelldateien prüfen.');
-    onProgress({ state: 'queued', message: 'ComfyUI berechnet dein Bild. Warteschlange und Ergebnis werden geprüft …' });
-    while (true) {
-      combined.throwIfAborted();
-      const history = await readServerJson(await request(`${origin}/history/${encodeURIComponent(queued.prompt_id)}`), 2 * 1024 * 1024);
-      const result = history?.[queued.prompt_id];
-      if (result?.status?.status_str === 'error' || result?.status?.messages?.some(m => ['execution_error', 'execution_interrupted'].includes(m?.[0]))) throw new Error('ComfyUI konnte den Workflow nicht abschließen. Prüfe den Workflow und die Serverkonsole.');
-      if (result && (result.status?.completed === true || result.status?.status_str === 'success')) {
-        const images = result.outputs?.[prepared.mapping.outputNode]?.images;
-        if (!Array.isArray(images) || !images.length) throw new Error('Der gewählte Ausgabe-Node hat kein Bild gespeichert. Bitte einen SaveImage-Ausgabe-Node zuordnen.');
-        if (images.length > 4) throw new Error('Der Workflow liefert mehr als vier Bilder. Bitte die Batchgröße reduzieren.');
-        onProgress({ state: 'receiving', message: 'ComfyUI-Bilder werden geladen und verschlüsselt gespeichert …' });
-        const attachments = [];
-        for (const image of images) {
-          const query = outputQuery(image);
-          const bytes = await readImage(await request(`${origin}/view?${query}`));
-          attachments.push(imageAttachment(bytes.toString('base64'), image.filename));
-        }
-        return { images: attachments, seed: prepared.options.seed };
-      }
-      await pause(pollInterval, undefined, { signal: combined });
+  const queue=await readServerJson(await request('/queue'),4*1024*1024);
+  if(!Array.isArray(queue.queue_running) || !Array.isArray(queue.queue_pending)) throw Error('ComfyUI liefert keine verlässliche Auftragswarteschlange.');
+  for(const [key,state] of [['queue_running','running'],['queue_pending','queued']]) {
+    const item=queue[key].find(x=>Array.isArray(x)&&x[1]===id);
+    if(item) {
+      if(job.clientId && item[3]?.client_id && item[3].client_id!==job.clientId) return {state:'unknown',detail:'Die Server-ID gehört nicht zum erwarteten KAIROS-Client.'};
+      return {state,detail:state==='running'?'ComfyUI meldet diesen Auftrag als laufend.':'Dieser Auftrag wartet in der ComfyUI-Warteschlange.'};
     }
-  } catch (error) {
-    if (signal?.aborted) throw new Error('Bildanfrage abgebrochen. Der ComfyUI-Auftrag kann auf dem Server weiterlaufen.');
-    if (deadline.aborted) throw new Error('ComfyUI hat innerhalb von 20 Minuten kein fertiges Bild geliefert. Der Serverauftrag kann weiterlaufen.');
-    if (error instanceof TypeError) throw new Error('ComfyUI ist nicht erreichbar. Serveradresse, VPN und TLS prüfen.');
-    if (error.name === 'TimeoutError') throw new Error('ComfyUI antwortet derzeit nicht. Der Serverauftrag kann weiterlaufen.');
-    throw error;
   }
+  // Close the queue/history completion race with a second history read.
+  const finalHistory=await readServerJson(await request('/history/'+encodeURIComponent(id)),4*1024*1024);
+  const final=finalHistory?.[id];
+  if(final) {
+    if(final.status?.messages?.some(m=>m?.[0]==='execution_interrupted'))return {state:'cancelled',detail:'Serverseitiger Abbruch bestätigt.'};
+    if(final.status?.status_str==='error')return {state:'failed',detail:'ComfyUI meldet einen fehlgeschlagenen Auftrag.'};
+    if(final.status?.completed || final.status?.status_str==='success')return {state:'completed',detail:'Ergebnis vorhanden.',result:final};
+  }
+  return {state:result?'unknown':'missing',detail:result?'Der Server meldet keinen eindeutigen Abschlussstatus.':'Auftrag weder in Queue noch History auffindbar. Historie kann gelöscht oder abgelaufen sein.'};
+}
+export async function fetchComfyResult(job, result, {profile,auth,signal} = {}) {
+  const images=result?.outputs?.[job.outputNode]?.images;
+  if(!Array.isArray(images)||!images.length||images.length>4)throw Error('Der gespeicherte Ausgabe-Node liefert kein gültiges Bildergebnis (maximal vier Bilder).');
+  const request=comfyRequest(profile,auth,signal);const attachments=[];
+  for(const image of images) {
+    const query=outputQuery(image);const bytes=await readImage(await request('/view?'+query));
+    attachments.push(imageAttachment(bytes.toString('base64'),image.filename));
+  }
+  return {images:attachments,seed:job.seed};
+}
+export async function cancelComfyJob(job, options) {
+  // Running /interrupt is intentionally unavailable without an audited, atomic
+  // job-scoped interrupt contract. Old ComfyUI versions interrupt globally.
+  const before=await queryComfyJob(job,options);
+  if(before.state!=='queued')return {...before,confirmed:false,detail:before.state==='running'?'Kein verifizierter auftragsspezifischer Abbruch für laufende Berechnungen. Nicht mehr warten bleibt möglich.':before.detail};
+  const request=comfyRequest(options.profile,options.auth,options.signal);
+  await request('/queue',{method:'POST',body:JSON.stringify({delete:[jobId(job)]})});
+  const after=await queryComfyJob(job,options);
+  if(after.state==='missing')return {state:'cancelled',confirmed:true,detail:'Eigener wartender Auftrag gezielt gelöscht; Queue und History bestätigen, dass er nicht mehr vorhanden ist.'};
+  return {...after,confirmed:after.state==='cancelled',detail:after.detail};
+}
+export async function generateComfyImages(prompt, {profile,auth,entry,options,signal,onProgress=()=>{},onAccepted=async()=>{},onSlow=()=>{},pollInterval=1000,clientId=randomUUID()} = {}) {
+  if(profile?.type!=='comfyui'||!profile.enabled)throw Error('Bitte das ComfyUI-Bild-Backend aktivieren.');
+  const prepared=prepareComfyWorkflow(entry,prompt,options);const request=comfyRequest(profile,auth,signal);
+  const clearSlow=delayedAnswer(()=>onSlow('Die Antwort dauert länger als erwartet. Der ComfyUI-Auftragsstatus wird weiter geprüft.'));
+  try {
+    onProgress({state:'submitting',message:'Bild-Workflow wird an ComfyUI gesendet …'});
+    const queued=await readServerJson(await request('/prompt',{method:'POST',body:JSON.stringify({prompt:prepared.nodes,client_id:clientId})}));
+    if(typeof queued.prompt_id!=='string'||!/^[A-Za-z0-9_-]{1,100}$/.test(queued.prompt_id)||Object.keys(queued.node_errors??{}).length)throw Error('ComfyUI hat den Workflow nicht angenommen.');
+    const job={serverId:queued.prompt_id,clientId,outputNode:prepared.mapping.outputNode,seed:prepared.options.seed};
+    await onAccepted(job);
+    onProgress({state:'queued',message:'ComfyUI hat den Auftrag angenommen. Queue und History werden geprüft …'});
+    while(true) {
+      signal?.throwIfAborted();const status=await queryComfyJob(job,{profile,auth,signal});
+      if(status.state==='completed') {onProgress({state:'receiving',message:'ComfyUI-Bilder werden geladen und verschlüsselt gespeichert …'});return await fetchComfyResult(job,status.result,{profile,auth,signal});}
+      onProgress({state:status.state,message:status.detail});
+      if(['failed','cancelled','missing'].includes(status.state)){const error=Error(status.detail);error.jobState=status.state;throw error;}
+      await pause(pollInterval,undefined,{signal});
+    }
+  }catch(error) {
+    if(signal?.aborted)throw Error('Nicht mehr gewartet. '+unknownOutcome);
+    if(error.jobState)throw error;
+    throw Error(error.message+' '+unknownOutcome);
+  }finally{clearSlow();}
 }

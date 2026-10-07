@@ -7,10 +7,10 @@ import { SettingsStore } from './settings-store.mjs';
 import { CredentialStore } from './credential-store.mjs';
 import { SessionStore } from './session-store.mjs';
 
-export async function verifyUpdate({ root, dataDir, window, store, settings, credentials, workflows, attachments, cipher, publish, snapshot }) {
+export async function verifyUpdate({ root, dataDir, window, store, settings, credentials, workflows, attachments, jobs, cipher, publish, snapshot }) {
   const run = code => window.webContents.executeJavaScript(code);
   const json = data => new Response(JSON.stringify(data));
-  const previousFetch = globalThis.fetch;
+  const previousFetch = globalThis.fetch;let delayComfy=false;let promptPosts=0;
   const previousSaveDialog = dialog.showSaveDialog;
   const imageBytes = await readFile(join(root, 'assets/icon.png'));
   const exportFile = join(dataDir, 'fixture-export.png');
@@ -24,8 +24,10 @@ export async function verifyUpdate({ root, dataDir, window, store, settings, cre
     }
     if (url.endsWith('/system_stats')) return json({ system: { os: 'linux' } });
     if (url.endsWith('/object_info')) return json({ UnetLoaderGGUF: { input: { required: { unet_name: [['Qwen-Image-2.1.gguf']] } } } });
-    if (url.endsWith('/prompt')) { const body = JSON.parse(init.body); assert.equal(body.prompt['1'].inputs.text, 'UI-COMFY-PROMPT'); assert.equal(body.prompt['3'].inputs.width, 768); assert.equal(body.prompt['4'].inputs.seed, 8); return json({ prompt_id: 'ui-prompt' }); }
-    if (url.endsWith('/history/ui-prompt')) return json({ 'ui-prompt': { status: { completed: true, status_str: 'success' }, outputs: { '5': { images: [{ filename: 'ui-image.png', subfolder: '', type: 'output' }] } } } });
+    if (url.endsWith('/queue')) return json({queue_pending:[],queue_running:[[0,'ui-prompt']]});
+    if (url.endsWith('/prompt')) {promptPosts++; const body = JSON.parse(init.body); assert.equal(body.prompt['1'].inputs.text, 'UI-COMFY-PROMPT'); assert.equal(body.prompt['3'].inputs.width, 768); assert.equal(body.prompt['4'].inputs.seed, 8); return json({ prompt_id: 'ui-prompt' }); }
+    if (url.endsWith('/history/ui-prompt')) {if(delayComfy)return json({});return json({ 'ui-prompt': { status: { completed: true, status_str: 'success' }, outputs: { '5': { images: [{ filename: 'ui-image.png', subfolder: '', type: 'output' }] } } } });
+    }
     if (url.includes('/view?')) return new Response(imageBytes);
     throw new Error('Unexpected fixture request');
   };
@@ -94,6 +96,16 @@ export async function verifyUpdate({ root, dataDir, window, store, settings, cre
     await restoredSettings.load(); await restoredCredentials.load(); await restoredHistory.load();
     report.encryptedRestartPreservesChangesAndChats = restoredSettings.db.profiles[0].type === 'comfyui' && !Object.keys(restoredCredentials.db.entries).length && restoredHistory.active.messages[0].content === 'UPDATE-UI-HISTORY' && restoredSettings.db.updateRepository === 'https://github.com/FixtureOwner/FixtureUpdates'; assert.ok(report.encryptedRestartPreservesChangesAndChats);
     const generated = restoredHistory.active.messages.find(m => m.attachmentIds?.length); assert.ok(generated); assert.ok(attachments.get(generated.attachmentIds[0]));
+    // A running request locks settings; local stop retains server ID for later GET-only retrieval.
+    delayComfy=true;const sendPending=run('window.qwenChat.send("UI-COMFY-PROMPT",[],{width:768,seed:8})');
+    await until(()=>snapshot().busy&&jobs.snapshot().some(j=>j.waiting&&j.serverId==='ui-prompt'));
+    const waitingJob=jobs.snapshot().find(j=>j.waiting&&j.serverId==='ui-prompt');
+    assert.equal((await run('window.qwenChat.toggleProfile('+JSON.stringify(comfy.id)+',false)')).ok,false);
+    assert.equal(await run('document.querySelector(".profile-edit").disabled'),true);report.settingsLockedDuringRequest=true;
+    await run('window.qwenChat.cancel()');await sendPending;assert.equal(jobs.get(waitingJob.id).serverId,'ui-prompt');assert.equal(jobs.get(waitingJob.id).state,'unknown');
+    delayComfy=false;const postsBeforeRecovery=promptPosts;
+    assert.equal((await run('window.qwenChat.checkJob('+JSON.stringify(waitingJob.id)+')')).ok,true);
+    assert.equal(promptPosts,postsBeforeRecovery);report.localStopRetainsRecoverableJob=true;
     const clone = await run('window.qwenChat.duplicateWorkflowProfile(' + JSON.stringify(comfy.id) + ')'); assert.ok(clone.ok);
     const alternative = settings.db.profiles.find(p => p.id === clone.id);
     const optionalGraph = { '71': { class_type: 'Text', inputs: { text: 'EXAMPLE-ONLY' } }, '72': { class_type: 'Sampler', inputs: { cfg: 6 } }, '73': { class_type: 'SaveImage', inputs: { images: ['72', 0] } } };
@@ -107,6 +119,18 @@ export async function verifyUpdate({ root, dataDir, window, store, settings, cre
     await run('window.qwenChat.saveProfile(' + JSON.stringify({id:alternative.id,uploads:{files:false,photos:false}}) + ')');
     assert.equal(await run("document.querySelector('#attach-file').disabled"), true); report.uploadSettingsSaved = true;
     assert.equal((await run('window.qwenChat.setBetaUpdates(true)')).ok, true); assert.equal(settings.db.betaUpdates, true); report.betaPersists = true;
+    // Persist an accepted job, then simulate restart before completion. Recovery must attach once.
+    const recoveredMessage={id:randomUUID(),role:'user',content:'RECOVER-ME',state:'pending',createdAt:new Date().toISOString()};
+    store.active.messages.push(recoveredMessage);await store.save();
+    const recoveryJob=await jobs.create(comfy,store.active.id,recoveredMessage.id);
+    await jobs.update(recoveryJob.id,{serverId:'ui-prompt',outputNode:'5',recoverable:true,state:'running'});await jobs.load();publish();
+    assert.equal(jobs.get(recoveryJob.id).state,'unknown');
+    assert.equal((await run('window.qwenChat.checkJob('+JSON.stringify(recoveryJob.id)+')')).ok,true);
+    assert.equal((await run('window.qwenChat.checkJob('+JSON.stringify(recoveryJob.id)+')')).ok,true);
+    assert.equal(store.active.messages.filter(m=>m.jobId===recoveryJob.id&&m.role==='assistant').length,1);report.recoveryAfterRestartNoDuplicate=true;
+    const oldUrl=comfy.baseUrl;await settings.upsert({id:comfy.id,baseUrl:'https://other.example',enabled:false});
+    assert.equal((await run('window.qwenChat.checkJob('+JSON.stringify(recoveryJob.id)+')')).ok,false);report.changedConnectionBlocksRecovery=true;
+    await settings.upsert({id:comfy.id,baseUrl:oldUrl,enabled:false});
     const deletedId = store.active.id; await run("document.querySelector('#settings-dialog').close(); document.querySelector('#delete-chat').click(); document.querySelector('#chat-delete-confirm').click()");
     await until(() => !store.db.sessions.some(s => s.id === deletedId)); report.chatDeletionViaUI = true;
     assert.equal(await run('document.title'), 'KAIROS');

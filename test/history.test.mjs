@@ -28,11 +28,11 @@ test('history survives restart, session switching, and queued saves', async t =>
   await assert.rejects(() => restored.select('missing'));
 });
 
-test('pending message becomes cancelled after restart and is not sent as context', async t => {
+test('pending message becomes unknown after restart and is not sent as context', async t => {
   const dir = await folder(t); const store = new SessionStore(dir, testCipher); await store.load();
   store.active.messages.push(message('user', 'Interrupted', 'pending')); await store.save();
   const restored = new SessionStore(dir, testCipher); await restored.load();
-  assert.equal(restored.active.messages[0].state, 'cancelled');
+  assert.equal(restored.active.messages[0].state, 'unknown');
   assert.deepEqual(selectContext(restored.active.messages, 'New').messages, [{ role: 'user', content: 'New' }]);
 });
 

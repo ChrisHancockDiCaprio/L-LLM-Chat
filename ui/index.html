@@ -25,6 +25,7 @@
       </div>
     </header>
     <div id="notice" class="notice" role="status" hidden></div>
+    <div id="job-list" aria-live="polite"></div>
     <div id="context-note" class="context-note" hidden></div>
     <section id="conversation" class="conversation" aria-label="Chatverlauf" aria-live="polite">
       <div id="welcome" class="welcome">
@@ -70,6 +71,16 @@
         <label for="server-name">Servername</label><input id="server-name" required maxlength="30" placeholder="Zum Beispiel: Mein Server">
         <label for="server-url">Serveradresse</label><input id="server-url" type="url" required placeholder="https://mein-server.example">
         <p class="settings-hint">Automatische Erkennung liest die Modelllisten von Ollama und OpenAI-kompatiblen Chatservern. ComfyUI nutzt seine eigene API: Workflow importieren, Eingänge zuordnen und Bilder erzeugen. OpenAI-kompatible Bildserver verwenden eine andere Verbindungsart.</p>
+        <label class="checkbox-label"><input id="ssh-enabled" type="checkbox"> API über eigenen SSH-Tunnel verbinden</label>
+        <div id="ssh-fields" hidden>
+          <div class="model-options-grid"><label>SSH-Host<input id="ssh-host" value="192.168.0.175"></label><label>SSH-Port<input id="ssh-port" type="number" min="1" max="65535" value="22"></label><label>SSH-Benutzer<input id="ssh-user" value="hancock"></label></div>
+          <div class="model-options-grid"><label>API-Zielhost auf SSH-Server<input id="ssh-target" value="127.0.0.1"></label><label>API-Zielport<input id="ssh-target-port" type="number" min="1" max="65535" value="8000"></label><label>Lokaler Wunschport · 0 = automatisch<input id="ssh-local-port" type="number" min="0" max="65535" value="18000"></label></div>
+          <label>SSH-Authentifizierung<select id="ssh-auth"><option value="agent">SSH-Agent (bevorzugt)</option><option value="key">Schlüssel im Tresor</option><option value="password">Passwort im Tresor</option></select></label>
+          <input id="ssh-key-ref" type="hidden"><label id="ssh-passphrase-label" hidden>Schlüssel-Passphrase<input id="ssh-passphrase" type="password" autocomplete="off"></label><button id="ssh-key-import" class="secondary-button" type="button" hidden>SSH-Schlüssel sicher importieren</button>
+          <label id="ssh-secret-label" hidden>SSH-Passwort · leer = gespeicherten Zugang behalten<input id="ssh-secret" type="password" autocomplete="off"></label>
+          <label class="checkbox-label"><input id="ssh-target-tls" type="checkbox"> API-Ziel verwendet HTTPS (gültiges Zertifikat für Loopback nötig)</label>
+          <p class="settings-hint">Nur API-Portweiterleitung. Listener ausschließlich auf 127.0.0.1. Bei belegtem Wunschport wird ein freier Port verwendet. Keine entfernten Shellbefehle und kein Start/Stop des Modellservers.</p>
+        </div>
         <label for="server-auth">Zugang</label><select id="server-auth"><option value="none">Ohne Zugangsdaten</option><option value="bearer">API-Schlüssel (Bearer)</option><option value="basic">Benutzername und Passwort</option></select>
         <div id="server-user-field" hidden><label for="server-user">Benutzername</label><input id="server-user" maxlength="200" autocomplete="off"></div>
         <div id="server-secret-field" hidden><label id="server-secret-label" for="server-secret">API-Schlüssel</label><input id="server-secret" type="password" maxlength="4096" autocomplete="new-password" spellcheck="false"><p class="settings-hint">Wird verschlüsselt im Windows-Tresor abgelegt. Ein leeres Feld behält einen vorhandenen Zugang für dieselbe Adresse bei.</p></div>
@@ -135,5 +146,6 @@
     </section>
   </dialog>
 <dialog id="chat-delete-dialog"><h3>Chat löschen?</h3><p>Dieses Gespräch und seine ungenutzten Anhänge werden aus dem aktiven Tresor entfernt. Bereits angelegte Update-Sicherungen bleiben bestehen.</p><button id="chat-delete-cancel" class="secondary-button">Behalten</button><button id="chat-delete-confirm" class="primary-button danger-button">Chat löschen</button></dialog>
+<dialog id="ssh-trust-dialog"><h3>SSH-Hostschlüssel bestätigen</h3><p id="ssh-trust-host"></p><code id="ssh-trust-fingerprint"></code><p>Vergleiche diesen Fingerprint über einen vertrauenswürdigen Weg mit deinem Server. Erst deine bewusste Bestätigung erlaubt die erste Verbindung. Geänderte Schlüssel werden blockiert.</p><button id="ssh-trust-no" class="secondary-button">Ablehnen</button><button id="ssh-trust-yes" class="primary-button">Fingerprint geprüft · vertrauen</button></dialog>
 </body>
 </html>

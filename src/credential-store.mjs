@@ -1,3 +1,4 @@
+import{apiDestination}from'./ssh-store.mjs';
 import { randomUUID } from 'node:crypto';
 import { SecureFile } from './secure-file.mjs';
 import { normalizeAuth, normalizeOrigin } from './connection-security.mjs';
@@ -11,10 +12,10 @@ export class CredentialStore {
     for (const entry of Object.values(this.db.entries)) { normalizeOrigin(entry.origin); normalizeAuth(entry.auth); }
   }
   save() { return this.storage.write(JSON.stringify(this.db)); }
-  async add(origin, raw) {
+  async add(origin, raw, target) {
     const auth = normalizeAuth(raw);
     if (auth.type === 'none') return null;
-    const id = randomUUID(); this.db.entries[id] = { origin: normalizeOrigin(origin), auth };
+    const id = randomUUID(); this.db.entries[id] = { origin: normalizeOrigin(origin), auth, ...(target?{target}:{}) };
     try { await this.save(); } catch (error) { delete this.db.entries[id]; throw error; }
     return id;
   }
@@ -22,6 +23,7 @@ export class CredentialStore {
     if (!profile.authRef) return { type: 'none' };
     const entry = this.db.entries[profile.authRef];
     if (!entry || entry.origin !== normalizeOrigin(profile.baseUrl)) throw new Error('Der gespeicherte Zugang gehört nicht zu diesem Server.');
+    if(entry.target && entry.target!==apiDestination(profile) || profile.ssh && !entry.target)throw Error('API-Zugang gehört zu einem anderen SSH-/API-Ziel. Bitte neu hinterlegen.');
     return normalizeAuth(entry.auth);
   }
   async remove(id) {

@@ -8,7 +8,7 @@ function validDatabase(db) {
     db.sessions.some(s => s.id === db.activeId) && new Set(db.sessions.map(s => s.id)).size === db.sessions.length &&
     db.sessions.every(s => typeof s.id === 'string' && typeof s.title === 'string' && typeof s.createdAt === 'string' && Number.isFinite(Date.parse(s.createdAt)) && Array.isArray(s.messages) &&
       s.messages.every(m => typeof m.id === 'string' && ['user', 'assistant'].includes(m.role) && typeof m.content === 'string' &&
-        typeof m.createdAt === 'string' && Number.isFinite(Date.parse(m.createdAt)) && ['complete', 'pending', 'failed', 'cancelled'].includes(m.state) &&
+        typeof m.createdAt === 'string' && Number.isFinite(Date.parse(m.createdAt)) && ['complete', 'pending', 'failed', 'cancelled', 'unknown'].includes(m.state) &&
         (m.attachmentIds === undefined || Array.isArray(m.attachmentIds) && m.attachmentIds.length <= 4 && m.attachmentIds.every(id => typeof id === 'string' && /^[a-f0-9-]{36}$/.test(id)))));
 }
 
@@ -24,7 +24,7 @@ export class SessionStore {
       const session = freshSession(); this.db = { version: 1, activeId: session.id, sessions: [session] };
     }
     for (const session of this.db.sessions) {
-      for (const message of session.messages) if (message.state === 'pending') message.state = 'cancelled';
+      for (const message of session.messages) if (message.state === 'pending') message.state = 'unknown';
     }
     await this.save(); return this.db;
   }

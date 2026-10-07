@@ -1,5 +1,9 @@
 # Änderungen
 
+## 0.3.1 · SSH und sichere Auftragszustände
+
+Optionale SSH-Tunnel, Hostschlüsselprüfung, unbegrenztes Warten auf die ursprüngliche Antwort, verschlüsselte ComfyUI-Auftragszuordnung und Wiederabruf. Offline-Aktivierung verhindert und Einstellungen während Anfragen gesperrt. Details: SSH-UND-AUFTRAEGE.md.
+
 ## 0.3.0 – KAIROS
 
 Austauschbare verschlüsselte Workflow-Profile, optionale CFG- und Bildparameter mit Profilgrenzen, Upload-Freigaben je Modell, Chat-Löschen und Beta-Updates. Gemeinsamer Verlauf beim Modellwechsel. 72 Tests und isolierter Electron-Fenstertest bestanden. Details: release/notes-0.3.0.md und WORKFLOW-PROFILE.md.

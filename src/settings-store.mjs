@@ -1,3 +1,4 @@
+import {validateSSH,apiDestination} from './ssh-store.mjs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { SecureFile } from './secure-file.mjs';
@@ -22,7 +23,7 @@ export function validateProfile(raw) {
   if (raw.allowHttp !== undefined && typeof raw.allowHttp !== 'boolean') throw new Error('Ungültige HTTP-Freigabe.');
   if (raw.authRef != null && (typeof raw.authRef !== 'string' || raw.authRef.length > 100)) throw new Error('Ungültiger Zugang.');
   return {
-    id: raw.id, type: raw.type ?? 'ollama', name: raw.name.trim(), baseUrl: normalizeOrigin(raw.baseUrl), model: raw.model.trim(), enabled: raw.enabled,
+    ssh: validateSSH(raw.ssh), id: raw.id, type: raw.type ?? 'ollama', name: raw.name.trim(), baseUrl: normalizeOrigin(raw.baseUrl), model: raw.model.trim(), enabled: raw.enabled,
     allowHttp: raw.allowHttp === true, authRef: raw.authRef ?? null,
     ...(raw.type === 'comfyui' ? { serverInfo: { modelFiles: Array.isArray(raw.serverInfo?.modelFiles) ? raw.serverInfo.modelFiles.filter(f => typeof f === 'string' && f.length <= 200 && !/[\x00-\x1f]/.test(f)).slice(0, 100) : [], ggufAvailable: raw.serverInfo?.ggufAvailable === true, nodeCount: Number.isInteger(raw.serverInfo?.nodeCount) ? raw.serverInfo.nodeCount : 0 } } : {}),
     uploads: { files: raw.uploads?.files ?? true, photos: raw.uploads?.photos ?? true },
@@ -39,7 +40,7 @@ function validateSettings(raw) {
   const excludedModels = raw.excludedModels ?? [];
   if (!Array.isArray(excludedModels) || excludedModels.length > 500 || excludedModels.some(p => !['ollama', 'openai-chat', 'image-api', 'comfyui'].includes(p?.type) || typeof p.model !== 'string' || !p.model || p.model.length > 200 || /\s|[\x00-\x1f]/.test(p.model))) throw new Error('Ungültige Liste entfernter Modelle.');
   const updateRepository = raw.updateRepository == null ? null : repositoryUrl(githubSource(raw.updateRepository));
-  return { version: 1, activeId: raw.activeId, profiles, updateRepository, betaUpdates: raw.betaUpdates === true, excludedModels: excludedModels.map(p => ({ baseUrl: normalizeOrigin(p.baseUrl), type: p.type, model: p.model })) };
+  return { version: 1, activeId: raw.activeId, profiles, updateRepository, betaUpdates: raw.betaUpdates === true, excludedModels: excludedModels.map(p => ({ baseUrl: normalizeOrigin(p.baseUrl), type: p.type, model: p.model, destination: p.destination ?? normalizeOrigin(p.baseUrl) })) };
 }
 export class SettingsStore {
   constructor(directory, cipher, { legacyDirectory, legacyHttpAllowed = false } = {}) {
@@ -67,12 +68,12 @@ export class SettingsStore {
     const next = this.snapshot(); const existing = next.profiles.find(p => p.id === raw?.id);
     if (raw?.id && !existing) throw new Error('Verbindung nicht gefunden.');
     const profile = validateProfile({ ...existing, ...raw, id: raw?.id || randomUUID(), authRef: existing?.authRef ?? null, authType: existing?.authType ?? 'none' });
-    if (existing && profile.baseUrl !== existing.baseUrl) { profile.authRef = null; profile.authType = 'none'; profile.capabilities = []; profile.contextLimit = null; }
+    if (existing && profile.baseUrl !== existing.baseUrl || existing && apiDestination(profile)!==apiDestination(existing)) { profile.authRef = null; profile.authType = 'none'; profile.capabilities = []; profile.contextLimit = null; }
     const index = next.profiles.findIndex(p => p.id === profile.id);
     if (index >= 0) next.profiles[index] = profile;
     else { if (next.profiles.length >= 100) throw new Error('Maximal 100 Modelle sind möglich.'); next.profiles.push(profile); }
     if (next.activeId === profile.id && !profile.enabled) next.activeId = null;
-    next.excludedModels = next.excludedModels.filter(p => !(p.baseUrl === profile.baseUrl && p.type === profile.type && p.model === profile.model));
+    next.excludedModels = next.excludedModels.filter(p => !((p.destination ?? p.baseUrl) === apiDestination(profile) && p.type === profile.type && p.model === profile.model));
     return this.commit(next);
   }
   async duplicateImageProfile(id) {
@@ -88,13 +89,13 @@ export class SettingsStore {
   async setUpdateRepository(url) {
     return this.commit({ ...this.snapshot(), updateRepository: repositoryUrl(githubSource(url)) });
   }
-  async importServer({ name, baseUrl, allowHttp, models, authRef, authType, type = 'ollama', restoreRemoved = false }) {
+  async importServer({ name, baseUrl, allowHttp, models, authRef, authType, type = 'ollama', restoreRemoved = false, ssh }) {
     if (typeof name !== 'string' || !name.trim() || name.length > 30) throw new Error('Servername muss zwischen 1 und 30 Zeichen lang sein.');
     const origin = normalizeOrigin(baseUrl); const next = this.snapshot();
     if (!Array.isArray(models) || !models.length) throw new Error('Der Server hat noch keine Modelle.');
     for (const info of models) {
       const modelType = info.type ?? type;
-      const sameModel = p => p.baseUrl === origin && p.model === info.name && p.type === modelType;
+      const sameModel = p => (p.destination ?? apiDestination(p)) === apiDestination({baseUrl:origin,ssh}) && p.model === info.name && p.type === modelType;
       if (!restoreRemoved && next.excludedModels.some(sameModel)) continue;
       if (restoreRemoved) next.excludedModels = next.excludedModels.filter(p => !sameModel(p));
       const existing = next.profiles.find(sameModel);
@@ -102,7 +103,7 @@ export class SettingsStore {
       const chatCapable = !info.capabilities?.includes('embedding') || info.capabilities.includes('completion');
       const modelProfile = validateProfile({
         ...existing, id: existing?.id ?? randomUUID(), name: existing?.name ?? `${name.trim()} · ${info.name}`.slice(0, 60),
-        type: modelType, baseUrl: origin, model: info.name, enabled: chatCapable && (existing?.enabled ?? false), allowHttp, authRef, authType,
+        ssh: ssh ?? null, type: modelType, baseUrl: origin, model: info.name, enabled: chatCapable && (existing?.enabled ?? false), allowHttp, authRef, authType,
         capabilities: info.detailsAvailable === false ? existing?.capabilities ?? [] : info.capabilities, contextLimit: reportedLimit ?? existing?.contextLimit, serverInfo: info.serverInfo ?? existing?.serverInfo,
         options: { ...(existing?.options ?? { num_ctx: 8192, num_predict: 2048, temperature: 0.7 }), num_ctx: Math.min(existing?.options?.num_ctx ?? 8192, reportedLimit ?? existing?.contextLimit ?? 32768) },
       });
@@ -115,11 +116,11 @@ export class SettingsStore {
     const profile = this.db.profiles.find(p => p.id === id);
     if (!profile || typeof wholeServer !== 'boolean') throw new Error('Verbindung nicht gefunden.');
     const next = this.snapshot();
-    const removed = next.profiles.filter(p => wholeServer ? p.baseUrl === profile.baseUrl : p.id === id);
+    const removed = next.profiles.filter(p => wholeServer ? apiDestination(p) === apiDestination(profile) : p.id === id);
     const ids = new Set(removed.map(p => p.id));
     next.profiles = next.profiles.filter(p => !ids.has(p.id));
     if (ids.has(next.activeId)) next.activeId = null;
-    for (const p of removed) if (!next.excludedModels.some(e => e.baseUrl === p.baseUrl && e.type === p.type && e.model === p.model)) next.excludedModels.push({ baseUrl: p.baseUrl, type: p.type, model: p.model });
+    for (const p of removed) if (!next.excludedModels.some(e => (e.destination ?? e.baseUrl) === apiDestination(p) && e.type === p.type && e.model === p.model)) next.excludedModels.push({ baseUrl: p.baseUrl, type: p.type, model: p.model, destination:apiDestination(p) });
     await this.commit(next); return removed;
   }
   async toggle(id, enabled) {

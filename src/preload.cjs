@@ -1,5 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('qwenChat', {
+  checkJob: id => ipcRenderer.invoke('jobs:check',id),
+  stopJob: id => ipcRenderer.invoke('jobs:stop',id),
+  trustSSHHost: (id,accept) => ipcRenderer.invoke('ssh:trust',id,accept),
+  importSSHKey: config => ipcRenderer.invoke('ssh:key',config),
   state: () => ipcRenderer.invoke('chat:state'),
   checkUpdates: () => ipcRenderer.invoke('updates:check'),
   downloadUpdate: () => ipcRenderer.invoke('updates:download'),

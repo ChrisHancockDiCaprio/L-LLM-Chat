@@ -1,3 +1,4 @@
+import { generationFetch, delayedAnswer, unknownOutcome } from './generation-transport.mjs';
 import { normalizeOrigin, secureHeaders, httpError } from './connection-security.mjs';
 import { createOllamaRequest } from './ollama-request.mjs';
 import { imageAttachment } from './attachments.mjs';
@@ -38,7 +39,7 @@ export async function openaiModels(profile, auth, signal, { optional = false } =
   return [...models.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function sendOpenaiChat(messages, { profile, auth, signal } = {}) {
+export async function sendOpenaiChat(messages, { profile, auth, signal, onSlow } = {}) {
   if (!profile?.enabled || profile.type !== 'openai-chat') throw new Error('Diese KI ist nicht aktiviert.');
   const validated = createOllamaRequest(messages).messages;
   if (validated.some(m => m.images?.length) && !profile.capabilities?.includes('vision')) throw new Error('Das ausgewählte Modell unterstützt keine Bildeingaben.');
@@ -48,10 +49,9 @@ export async function sendOpenaiChat(messages, { profile, auth, signal } = {}) {
       return { type: 'image_url', image_url: { url: `data:${image.mime};base64,${image.base64}` } };
     }),
   ] }));
-  const deadline = AbortSignal.timeout(240000);
-  const combined = signal ? AbortSignal.any([deadline, signal]) : deadline;
+  const combined = signal ?? new AbortController().signal; const clearSlow = delayedAnswer(onSlow);
   try {
-    const response = await fetch(`${normalizeOrigin(profile.baseUrl)}/v1/chat/completions`, {
+    const response = await generationFetch(`${normalizeOrigin(profile.baseUrl)}/v1/chat/completions`, {
       method: 'POST', headers: secureHeaders(profile, auth), redirect: 'error', signal: combined,
       body: JSON.stringify({ model: profile.model, messages: wire, stream: false,
         temperature: profile.options.temperature, max_tokens: profile.options.num_predict }),
@@ -62,9 +62,8 @@ export async function sendOpenaiChat(messages, { profile, auth, signal } = {}) {
     if (choice?.finish_reason !== 'stop' || typeof choice.message?.content !== 'string' || !choice.message.content.trim()) throw new Error('Der Server liefert keine vollständige Textantwort.');
     return choice.message.content;
   } catch (error) {
-    if (signal?.aborted) throw new Error('Die Anfrage wurde abgebrochen.');
-    if (deadline.aborted) throw new Error('Die KI hat innerhalb von 240 Sekunden nicht vollständig geantwortet.');
-    if (error instanceof TypeError) throw new Error('Der Chatserver ist nicht erreichbar. Adresse, VPN und gültiges TLS-Zertifikat prüfen.');
-    throw error;
-  }
+    if (signal?.aborted) throw new Error('Nicht mehr gewartet. ' + unknownOutcome);
+    if (error instanceof TypeError) throw new Error('Der Chatserver ist nicht erreichbar. Adresse, VPN und gültiges TLS-Zertifikat prüfen. ' + unknownOutcome);
+    throw new Error(error.message + ' ' + unknownOutcome);
+  } finally { clearSlow(); }
 }
