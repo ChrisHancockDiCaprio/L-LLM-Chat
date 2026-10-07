@@ -1,0 +1,6 @@
+{
+  "provider": "github",
+  "owner": "ChrisHancockDiCaprio",
+  "repo": "L-LLM-Chat",
+  "requireSignedUpdates": true
+}

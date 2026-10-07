@@ -1,0 +1,10 @@
+node_modules/
+dist-release/
+data/
+work/
+*.vault
+*.tmp
+.env*
+preview*.png
+verification*.json
+*.log

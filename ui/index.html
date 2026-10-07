@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'">
+  <title>Qwen Chat</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="renderer.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><img class="brand-mark" src="../assets/sol-icon.svg" alt="SoL"><div><strong>Qwen Chat</strong><span>Dein lokaler Begleiter</span></div></div>
+    <button id="new-chat" class="new-chat"><span aria-hidden="true">＋</span> Neues Gespräch</button>
+    <div class="section-label">DEINE GESPRÄCHE</div>
+    <nav id="session-list" aria-label="Gespeicherte Gespräche"></nav>
+    <button id="settings-button" class="settings-button"><span aria-hidden="true">⚙</span> Einstellungen</button>
+    <div class="sidebar-bottom"><span class="local-dot"></span><div><strong>Bleibt bei dir.</strong><span>Historie auf diesem Rechner</span></div></div>
+  </aside>
+  <main>
+    <header class="topbar"><div><span class="eyebrow">DEIN LOKALER CHAT</span><h1 id="chat-title">Neues Gespräch</h1></div><div class="chat-controls">
+      <label class="sr-only" for="active-ai">KI für diesen Chat</label><select id="active-ai" aria-label="KI für die nächste Nachricht"></select>
+      <button id="connection-check" class="connection checking" title="Verbindung erneut prüfen"><span class="status-dot"></span><span id="connection-label">Verbindung prüfen …</span><span class="refresh" aria-hidden="true">↻</span></button>
+      </div>
+    </header>
+    <div id="notice" class="notice" role="status" hidden></div>
+    <div id="context-note" class="context-note" hidden></div>
+    <section id="conversation" class="conversation" aria-label="Chatverlauf" aria-live="polite">
+      <div id="welcome" class="welcome">
+        <div class="welcome-mark">q<span class="spark">✦</span></div>
+        <span class="eyebrow">KLEINES MODELL. GROSSE IDEEN.</span>
+        <h2>Was liegt an?</h2>
+        <p>Eine Frage, eine Idee oder ein Stück Code.<br>Qwen ist bereit für dein nächstes Gespräch.</p>
+        <div class="suggestions">
+          <button data-prompt="Erkläre mir ein interessantes technisches Konzept einfach und mit einem Beispiel."><span>◎</span><strong>Etwas verstehen</strong><small>Einfach erklärt, Schritt für Schritt</small></button>
+          <button data-prompt="Hilf mir, eine Idee weiterzuentwickeln. Stelle mir zuerst eine kurze Frage dazu."><span>✧</span><strong>Eine Idee entwickeln</strong><small>Gemeinsam weiterdenken</small></button>
+          <button data-prompt="Ich möchte ein kleines Stück Code besprechen. Frage mich zuerst nach dem Code und meinem Ziel."><span>⌘</span><strong>Code besprechen</strong><small>Eine zweite Perspektive</small></button>
+        </div>
+      </div>
+      <div id="messages" class="messages"></div>
+      <div id="waiting" class="waiting" hidden><span class="avatar qwen-avatar">q</span><div><strong>Qwen</strong><div class="thinking"><i></i><i></i><i></i><span>Antwort wird vorbereitet …</span></div></div></div>
+    </section>
+    <footer class="compose-area">
+      <form id="chat-form" class="composer">
+        <div class="attachment-toolbar"><button id="attach-file" type="button" class="secondary-button">＋ Bild / Datei</button><span id="attachment-help">Bilder, Text und Code anhängen</span></div>
+        <div id="attachment-list" class="attachment-list"></div>
+        <label class="sr-only" for="message-input">Nachricht an Qwen</label>
+        <textarea id="message-input" rows="3" maxlength="4000" placeholder="Schreib Qwen eine Nachricht …"></textarea>
+        <div class="composer-bottom"><span>Enter zum Senden <span class="separator">·</span> Shift + Enter für eine neue Zeile</span><button id="send-button" type="submit" disabled><span id="send-label">Senden</span><span id="send-icon" aria-hidden="true">↗</span></button></div>
+      </form>
+      <div class="footer-note"><span><span class="model-dot"></span> <span id="model-label">Modell auswählen</span></span><span>Historie verschlüsselt gespeichert</span></div>
+    </footer>
+  </main>
+  <dialog id="settings-dialog" aria-labelledby="settings-title">
+    <div class="settings-heading"><div><span class="eyebrow">DEINE KI, DEINE AUSWAHL</span><h2 id="settings-title">Einstellungen</h2><p>Verbinde deine Modelle und entscheide, welche du nutzen möchtest.</p></div><button id="settings-close" class="icon-button" aria-label="Einstellungen schließen">×</button></div>
+    <nav class="settings-tabs" aria-label="Einstellungsbereiche"><button id="tab-local" class="selected" type="button">Server &amp; Modelle</button><button id="tab-security" type="button">Sicherheit</button><button id="tab-litellm" type="button">LiteLLM <span class="concept-badge">Konzept</span></button><button id="tab-updates" type="button">Updates</button></nav>
+    <div id="settings-feedback" class="settings-feedback" role="status" hidden></div>
+    <section id="local-panel">
+      <div class="settings-section-heading"><div><h3>Deine Server und Modelle</h3><p>Server prüfen, Modelle entdecken und gezielt aktivieren.</p></div><button id="add-server" class="primary-button">＋ Server</button></div>
+      <form id="server-form" class="profile-form" hidden autocomplete="off">
+        <div class="form-title"><h3>Server hinzufügen oder aktualisieren</h3><button id="server-form-close" type="button" class="icon-button" aria-label="Serverformular schließen">×</button></div>
+        <input id="server-id" type="hidden">
+        <label for="server-type">Verbindungsart</label><select id="server-type"><option value="ollama">Ollama · Chat &amp; Bilder verstehen</option><option value="image-api">Bildgenerator · OpenAI-kompatibel / stable-diffusion.cpp</option></select>
+        <label for="server-name">Servername</label><input id="server-name" required maxlength="30" placeholder="Zum Beispiel: Mein Server">
+        <label for="server-url">Serveradresse</label><input id="server-url" type="url" required placeholder="https://mein-server.example">
+        <p class="settings-hint">Der Bildserver stellt /v1/models sowie /v1/images/generations bereit. Für Bildbearbeitung zusätzlich /v1/images/edits. Qwen-Image-GGUF läuft in einer separaten Laufzeit; die App lädt keine GGUF-Dateien. Eine direkte ComfyUI-Verbindung benötigt einen passenden Adapter.</p>
+        <label for="server-auth">Zugang</label><select id="server-auth"><option value="none">Ohne Zugangsdaten</option><option value="bearer">API-Schlüssel (Bearer)</option><option value="basic">Benutzername und Passwort</option></select>
+        <div id="server-user-field" hidden><label for="server-user">Benutzername</label><input id="server-user" maxlength="200" autocomplete="off"></div>
+        <div id="server-secret-field" hidden><label id="server-secret-label" for="server-secret">API-Schlüssel</label><input id="server-secret" type="password" maxlength="4096" autocomplete="new-password" spellcheck="false"><p class="settings-hint">Wird verschlüsselt im Windows-Tresor abgelegt. Ein leeres Feld behält einen vorhandenen Zugang für dieselbe Adresse bei.</p></div>
+        <label class="checkbox-label"><input id="server-http" type="checkbox"> HTTP ohne Zugangsdaten im Heimnetz ausdrücklich erlauben</label>
+        <p class="settings-hint">HTTPS schützt die Übertragung. Die HTTP-Ausnahme ist unverschlüsselt und nur für private IP-Adressen zulässig. Eine VPN-Verbindung wird von der App nicht automatisch geprüft.</p>
+        <button id="save-server" class="primary-button" type="submit">Server prüfen &amp; Modelle hinzufügen</button>
+        <p id="server-feedback" class="probe-feedback" role="status"></p>
+      </form>
+      <button id="add-profile" class="secondary-button" type="button">Einzelnes Modell manuell hinzufügen</button>
+      <div id="profile-list"></div>
+      <p class="settings-hint">Ein Schalter steuert die Nutzung in dieser App. Modelle auf dem Server bleiben erhalten. Beim Serverwechsel wird der ausgewählte Kontext des bisherigen Chats mitgeschickt. Beginne für getrennte Inhalte ein neues Gespräch.</p>
+      <form id="profile-form" class="profile-form" hidden>
+        <div class="form-title"><h3 id="profile-form-title">Neue Ollama-Verbindung</h3><button id="profile-form-close" type="button" class="icon-button" aria-label="Bearbeitung schließen">×</button></div>
+        <input id="profile-id" type="hidden">
+        <label for="profile-type">Verbindungsart</label><select id="profile-type"><option value="ollama">Ollama-Chat</option><option value="image-api">Bildgenerator (OpenAI-kompatibel)</option></select>
+        <label for="profile-name">Name</label><input id="profile-name" required maxlength="60" placeholder="Zum Beispiel: Qwen auf Ubuntu">
+        <label for="profile-url">Ollama-Server</label><div class="url-field"><input id="profile-url" required type="url" placeholder="https://mein-server.example"><button id="probe-server" type="button" class="secondary-button">Modelle laden</button></div>
+        <label for="profile-model">Modell</label><input id="profile-model" required list="model-options" maxlength="200" placeholder="qwen3.5:4b"><datalist id="model-options"></datalist>
+        <p id="probe-feedback" class="probe-feedback" role="status"></p>
+        <div class="model-options-grid"><div><label for="profile-temperature">Kreativität (0–2)</label><input id="profile-temperature" type="number" min="0" max="2" step="0.1" value="0.7" required></div><div><label for="profile-context">Kontextfenster (Tokens)</label><input id="profile-context" type="number" min="512" max="32768" step="1" value="8192" required></div><div><label for="profile-output">Antwortlimit (Tokens)</label><input id="profile-output" type="number" min="128" max="8192" step="1" value="2048" required></div></div>
+        <p class="settings-hint">Kontext, Kreativität und Antwortlimit gelten für Ollama-Chats. Bildeingaben brauchen ein Modell mit Vision. Der Bildgenerator fordert ein Bild mit 1024 × 1024 Pixeln an; weitere Bildparameter und Tool-Aufrufe sind noch nicht bedienbar.</p>
+        <label class="checkbox-label"><input id="profile-http" type="checkbox"> HTTP ohne Zugangsdaten im Heimnetz erlauben</label>
+        <div class="form-bottom"><label class="checkbox-label"><input id="profile-enabled" type="checkbox" checked> In dieser App aktivieren</label><button id="save-profile" class="primary-button" type="submit">Verbindung speichern</button></div>
+      </form>
+    </section>
+    <section id="security-panel" hidden>
+      <div class="concept-intro"><span class="concept-icon">◇</span><div><h3>Dein verschlüsselter Tresor</h3><p>Verbindungen, Zugänge und Historie werden außerhalb des Projektordners verschlüsselt gespeichert.</p></div></div>
+      <div class="security-card"><strong>Windows-Schutz aktiv</strong><p>Der Schlüssel wird durch dein Windows-Benutzerkonto geschützt. Es gibt keinen Klartext-Ersatzspeicher.</p><code id="vault-location"></code></div>
+      <div class="security-card"><strong>Übertragung und fremde Server</strong><p>Zugangsdaten nur über HTTPS mit gültigem Zertifikat. Keine Weiterleitungen mit Schlüsseln. Dein bestehender HTTP-Server ist eine ausdrücklich erlaubte Heimnetz-Ausnahme.</p><p>Ein fremder Serverbetreiber kann die gesendeten Chat-Inhalte sehen. Nutze einen eigenen, widerrufbaren Zugang für diese App.</p></div>
+      <div class="security-card"><strong>Authenticator · Konzept</strong><p>Ein Einmalcode kann später eine Sitzung zusätzlich freigeben. Für einen eigenen App-Zugang ist eine separate Einrichtung erforderlich. Der wechselnde Code ist kein Schlüssel zur Verschlüsselung.</p><p>Geplant: unabhängiges Tresorpasswort oder Windows Hello, optional Authenticator, automatische Sitzungssperre und Wiederherstellung. Diese zusätzliche Freigabe ist noch nicht implementiert.</p></div>
+      <p class="settings-hint">Während der Nutzung braucht die App entschlüsselte Daten im Arbeitsspeicher. Windows-Schutz verhindert keine Zugriffe durch Schadsoftware unter deinem bereits angemeldeten Konto. Bereits vorhandene Klartextkopien auf Datenträgern lassen sich nachträglich nicht garantiert sicher löschen.</p>
+    </section>
+    <section id="updates-panel" hidden>
+      <div class="concept-intro"><img width="52" height="52" src="../assets/sol-icon.svg" alt="SoL"><div><h3>Qwen Chat <span id="app-version"></span></h3><p>Neue Versionen über GitHub. Deine Gespräche und dein Tresor bleiben erhalten.</p></div></div>
+      <div class="security-card"><strong>Deine Version</strong><p id="update-status" role="status"></p><progress id="update-progress" max="100" hidden></progress><div class="update-buttons"><button id="update-check" class="primary-button">Auf Updates prüfen</button><button id="update-download" class="secondary-button" disabled>Herunterladen</button><button id="update-install" class="secondary-button" disabled>Installieren &amp; neu starten</button></div></div>
+      <div class="security-card"><strong>Erste Veröffentlichung</strong><p>Das GitHub-Repository ist derzeit privat. Die App ist für spätere öffentliche Releases vorbereitet; es wird kein GitHub-Schlüssel mitgeliefert.</p><p>Diese Pilotversion ist noch nicht mit einem Windows-Herausgeberzertifikat signiert. Die Installation aus der App ist deshalb gesperrt. Neue Setup-Dateien kannst du manuell über die bestehende Installation installieren.</p></div>
+      <p class="settings-hint">Programm: frei wählbarer Installationsordner. Daten: Windows-Tresor unter LocalAppData\QwenChat\Vault. Auch eine Deinstallation bewahrt den Tresor. Er ist an dein Windows-Benutzerkonto gebunden; eine Kopie allein ist keine portable Wiederherstellung.</p>
+    </section>
+    <section id="litellm-panel" hidden>
+      <div class="concept-intro"><span class="concept-icon">⇄</span><div><h3>Ein Gateway für mehrere Modelle</h3><p>Später kannst du lokale Modelle und weitere Anbieter über deine LiteLLM-Verbindung auswählen.</p></div></div>
+      <div class="gateway-flow"><span>Dein Chat</span><b>→</b><span>LiteLLM-Gateway</span><b>→</b><span>Deine Modelle</span></div>
+      <div class="concept-form"><label for="gateway-url">Gateway-Adresse</label><input id="gateway-url" disabled placeholder="http://localhost:4000"><label for="gateway-model">Modellalias</label><input id="gateway-model" disabled placeholder="mein-modell"><label for="gateway-key">Gateway-Schlüssel</label><input id="gateway-key" disabled type="password" placeholder="Später sicher hinterlegen"><button class="primary-button" disabled>LiteLLM verbinden · geplant</button></div>
+      <p class="settings-hint">Das ist eine Konzeptansicht. Sie stellt keine Verbindung her und speichert keine Zugangsdaten. Vorgesehen sind Modellauswahl und eine sichere Ablage des Gateway-Schlüssels.</p>
+    </section>
+  </dialog>
+</body>
+</html>

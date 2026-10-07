@@ -1,0 +1,23 @@
+{
+  "name": "qwen-chat-windows",
+  "productName": "Qwen Chat",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "main": "src/main.mjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.mjs",
+    "verify": "electron . --verify",
+    "dist": "node --require ./scripts/nsis-static-uninstaller.cjs node_modules/electron-builder/cli.js --config electron-builder.config.cjs --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.6.0",
+    "electron-builder": "26.15.3"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9"
+  },
+  "description": "Lokaler KI-Chat mit verschlüsseltem Windows-Tresor",
+  "author": "Chris Hancock"
+}
