@@ -5,7 +5,7 @@ Aktueller Stand **0.3.0**: siehe [WORKFLOW-PROFILE.md](WORKFLOW-PROFILE.md) und 
 ## Chatserver
 
 1. Einstellungen → **＋ Server** → **Chatserver automatisch erkennen**.
-2. Namen und Serveradresse ohne API-Pfad eintragen. Für deinen Ollama-Server: `http://192.168.0.175:11434`. HTTP im Heimnetz ausdrücklich erlauben, keine Zugangsdaten über HTTP verwenden.
+2. Namen und Serveradresse ohne API-Pfad eintragen. Für deinen Ollama-Server: `http://<SERVER-IP>:11434`. HTTP im Heimnetz ausdrücklich erlauben, keine Zugangsdaten über HTTP verwenden.
 3. **Server prüfen & Modelle hinzufügen** liest `/api/tags` und `/v1/models` vom angegebenen Server. Ollama-Metadaten kommen aus `/api/show`; zusätzliche Gateway-Aliase werden als OpenAI-kompatible Chatmodelle geführt. Überlappende Modellnamen werden einmal mit Ollama geführt. Bei 401/403 stoppt die automatische Erkennung.
 4. Neue Modelle ausdrücklich aktivieren und **Im Chat nutzen** wählen. Ollama verwendet `/api/chat`, kompatible Chatserver `/v1/chat/completions`. Bildfähigkeiten werden nur anhand gemeldeter Metadaten angenommen.
 
@@ -28,7 +28,7 @@ Klick außerhalb des Einstellungsfensters schließt es; Klicks auf freie Fläche
 Qwen Image 2.1 und ComfyUI-GGUF sind laut Benutzer auf Ubuntu installiert. Ein getesteter API-Workflow fehlt noch.
 
 1. Einstellungen → **＋ Server** → **ComfyUI · eigenes Bild-Backend**.
-2. Namen wählen, Adresse `http://192.168.0.175:8188` prüfen und die HTTP-Heimnetz-Ausnahme ausdrücklich erlauben. Ein leeres Adressfeld wird mit dieser Basisadresse vorbelegt; es startet noch keine Anfrage. Mit Zugangsdaten ist HTTPS erforderlich.
+2. Namen wählen, Adresse `http://<SERVER-IP>:8188` prüfen und die HTTP-Heimnetz-Ausnahme ausdrücklich erlauben. Ein leeres Adressfeld wird mit dieser Basisadresse vorbelegt; es startet noch keine Anfrage. Mit Zugangsdaten ist HTTPS erforderlich.
 3. Die App prüft ausschließlich `/system_stats` und `/object_info`. Sie zeigt erkannte GGUF-Knoten und die Anzahl gemeldeter Modelldateien. ComfyUI wird nicht als Ollama-/OpenAI-Server behandelt; einzelne Diffusions-, Encoder- und VAE-Dateien sind keine fertigen Chatmodelle.
 4. Später einen vollständigen, auf diesem Server getesteten Workflow als **API Format** exportieren. Bei Bedarf den Entwicklermodus in ComfyUI aktivieren.
 5. **API-Workflow importieren** öffnet die native Dateiauswahl. Die App akzeptiert bis 2 MB / 300 API-Knoten mit `class_type` und `inputs`. Die normale Editor-Datei mit `nodes` reicht nicht. Die Kopie wird als `workflows.vault` mit Windows DPAPI verschlüsselt gespeichert. Die Originaldatei bleibt unverändert.
@@ -50,7 +50,7 @@ Einstellungen → **Updates** → vollständige öffentliche GitHub-Repository-A
 ## Prüfung vom 7. Oktober 2026
 
 - Ollama vom Windows-Rechner erreichbar: `hermes3:8b`, `qwen3.5:4b` erkannt. Eine Bildgenerierung wurde dabei nicht gestartet.
-- ComfyUI unter `192.168.0.175:8188` jetzt aus Windows erreichbar, GGUF-Knoten und Modelldateien erkannt. Kein tatsächlicher Qwen-Image-Lauf ohne Benutzer-Workflow; keine Server-/Firewall-Einstellungen geändert.
+- ComfyUI unter `<SERVER-IP>:8188` jetzt aus Windows erreichbar, GGUF-Knoten und Modelldateien erkannt. Kein tatsächlicher Qwen-Image-Lauf ohne Benutzer-Workflow; keine Server-/Firewall-Einstellungen geändert.
 - GitHub-Repository jetzt öffentlich erreichbar. Noch kein stabiles Release veröffentlicht; bestehende Entwürfe sind keine Updatequelle.
 - 66 Tests: Erkennung, Authentifizierung, Chattransport, Verschlüsselung, Historie, Löschverhalten, Workflow-Zuordnung, Parameterersetzung, native Bildanfrage, Abbruch, Ergebnisprüfung, Updatequellenwechsel und Fehlerfälle.
 - Isolierter Electron-Fenstertest zusätzlich: Workflow zuordnen und aktivieren, künstliches ComfyUI-Bild im Chat, bildgetreuer Datei-Export, Updateadresse speichern/ablehnen und verschlüsselter Neustart. Künstliche Antworten und Testtresor; keine echten Benutzerdaten gelöscht.

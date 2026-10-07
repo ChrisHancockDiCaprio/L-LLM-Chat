@@ -4,7 +4,7 @@
 
 Einstellungen → Server hinzufügen oder Zugang bearbeiten → SSH-Tunnel aktivieren. Backend: OpenAI-kompatibler Chat. Die gespeicherte API-Adresse kann weiterhin `http://127.0.0.1:18000` sein; bei aktiviertem SSH verwendet KAIROS den tatsächlich gewählten Tunnelport.
 
-- SSH-Host `192.168.0.175`, Port `22`, Benutzer `hancock`.
+- SSH-Host `<SERVER-IP>`, Port `22`, Benutzer `<SSH-BENUTZER>`.
 - Zielhost `127.0.0.1`, Zielport `8000`. Colibri bleibt auf Ubuntu-Loopback.
 - Lokaler Wunschport `18000`, oder `0` für automatisch. Bei Belegung weicht KAIROS auf einen freien Port aus. Listener ausschließlich Windows-Loopback.
 - Authentifizierung: Windows-OpenSSH-Agent, importierter privater Schlüssel mit optionaler Passphrase oder Passwort. Importierte Schlüssel, Passphrasen und Passwörter werden mit Electron safeStorage/Windows-DPAPI im separaten Zugangstresor gespeichert. Der ursprünglich ausgewählte Schlüssel wird nicht verändert. Kein Klartext-Fallback, keine zusätzlichen Passwortdateien oder geheimen Prozessargumente.

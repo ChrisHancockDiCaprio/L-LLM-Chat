@@ -10,7 +10,7 @@ Beim Senden werden die Originalanhänge separat als `attachment-<ID>.vault` mit 
 
 ## Qwen-Image-2.1-Uncensored-GGUF anbinden
 
-Die App stellt die Verbindung zu einer Laufzeit her; sie lädt keine GGUF-Dateien selbst. Dein Qwen Image soll über ComfyUI auf `http://192.168.0.175:8188` laufen. In 0.2.1 ist eine eigene ComfyUI-Verbindungsprüfung mit GGUF-/Modelldatei-Erkennung und verschlüsseltem API-Workflow-Import vorbereitet. Der eigentliche Workflow-Bildlauf ist noch deaktiviert. Einrichtung und Prüfstatus: **SERVER-UND-COMFYUI.md**.
+Die App stellt die Verbindung zu einer Laufzeit her; sie lädt keine GGUF-Dateien selbst. Dein Qwen Image soll über ComfyUI auf `http://<SERVER-IP>:8188` laufen. In 0.2.1 ist eine eigene ComfyUI-Verbindungsprüfung mit GGUF-/Modelldatei-Erkennung und verschlüsseltem API-Workflow-Import vorbereitet. Der eigentliche Workflow-Bildlauf ist noch deaktiviert. Einrichtung und Prüfstatus: **SERVER-UND-COMFYUI.md**.
 
 Für andere Bildserver steht weiterhin ein getrennter Anschluss über OpenAI-kompatible Bildendpunkte zur Verfügung, wie sie beispielsweise `stable-diffusion.cpp` bereitstellt. Diese folgenden Schritte gelten nicht für ComfyUI:
 

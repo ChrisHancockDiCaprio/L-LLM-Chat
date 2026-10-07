@@ -1,6 +1,6 @@
 # Austauschbare Bild-Profile in KAIROS
 
-1. Einstellungen → Server & Modelle: ComfyUI mit `http://192.168.0.175:8188` hinzufügen. HTTP nur als ausdrücklich erlaubte Heimnetz-Ausnahme; Zugänge erfordern HTTPS. ComfyUI wird separat über `/prompt`, `/history` und `/view` angesprochen.
+1. Einstellungen → Server & Modelle: ComfyUI mit `http://<SERVER-IP>:8188` hinzufügen. HTTP nur als ausdrücklich erlaubte Heimnetz-Ausnahme; Zugänge erfordern HTTPS. ComfyUI wird separat über `/prompt`, `/history` und `/view` angesprochen.
 2. In der ComfyUI-Karte **API-Workflow importieren** wählen. Für ein weiteres Modell auf demselben Server **Weiteres Bild-Profil** anklicken, über **Bearbeiten** benennen, anschließend dessen eigene Vorlage importieren. Das neue Profil bleibt deaktiviert.
 3. **Workflow zuordnen**: Prompt-Eingang und Bild-Ausgabe-Node wählen. Negative Prompt, Breite, Höhe, Seed, Schritte und CFG nur zuordnen, wenn der Workflow sie unterstützt. Verbundene Node-Eingänge sind nicht direkt editierbar.
 4. Für zugeordnete Zahlenfelder Standard, Minimum, Maximum und Schrittmaß einstellen. Grenzen werden beim Senden erneut geprüft. Sicherheitsobergrenzen: Größe 128–4096 in Vielfachen von 8, Schritte 1–150, Seed -1 oder 0–4294967295, CFG 0–100.
@@ -12,7 +12,7 @@ Zusätzlich zum API-Graphen akzeptiert der Import vollständige Profil-Dateien m
 ```json
 {
   "backendType": "comfyui",
-  "baseUrl": "http://192.168.0.175:8188",
+  "baseUrl": "http://<SERVER-IP>:8188",
   "name": "Mein Bildmodell",
   "nodes": {},
   "mapping": {"prompt": {"nodeId": "<ID aus diesem Workflow>", "input": "<Eingang>"}, "outputNode": "<Bild-Ausgabe-ID>"},
