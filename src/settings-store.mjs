@@ -5,6 +5,7 @@ import { normalizeOrigin, secureHeaders, httpError } from './connection-security
 import { imageModels } from './image-client.mjs';
 import { openaiModels, readServerJson } from './openai-client.mjs';
 import { inspectComfyUI } from './comfyui-client.mjs';
+import { githubSource, repositoryUrl } from './update-source.mjs';
 export { normalizeOrigin } from './connection-security.mjs';
 
 export function validateProfile(raw) {
@@ -35,7 +36,8 @@ function validateSettings(raw) {
   if (raw.activeId !== null && !profiles.some(p => p.id === raw.activeId && p.enabled)) throw new Error('Die ausgewählte KI ist nicht aktiviert.');
   const excludedModels = raw.excludedModels ?? [];
   if (!Array.isArray(excludedModels) || excludedModels.length > 500 || excludedModels.some(p => !['ollama', 'openai-chat', 'image-api', 'comfyui'].includes(p?.type) || typeof p.model !== 'string' || !p.model || p.model.length > 200 || /\s|[\x00-\x1f]/.test(p.model))) throw new Error('Ungültige Liste entfernter Modelle.');
-  return { version: 1, activeId: raw.activeId, profiles, excludedModels: excludedModels.map(p => ({ baseUrl: normalizeOrigin(p.baseUrl), type: p.type, model: p.model })) };
+  const updateRepository = raw.updateRepository == null ? null : repositoryUrl(githubSource(raw.updateRepository));
+  return { version: 1, activeId: raw.activeId, profiles, updateRepository, excludedModels: excludedModels.map(p => ({ baseUrl: normalizeOrigin(p.baseUrl), type: p.type, model: p.model })) };
 }
 export class SettingsStore {
   constructor(directory, cipher, { legacyDirectory, legacyHttpAllowed = false } = {}) {
@@ -63,7 +65,6 @@ export class SettingsStore {
     const next = this.snapshot(); const existing = next.profiles.find(p => p.id === raw?.id);
     if (raw?.id && !existing) throw new Error('Verbindung nicht gefunden.');
     const profile = validateProfile({ ...existing, ...raw, id: raw?.id || randomUUID(), authRef: existing?.authRef ?? null, authType: existing?.authType ?? 'none' });
-    if (profile.type === 'comfyui' && profile.enabled) throw new Error('ComfyUI ist vorbereitet. Workflow-Zuordnung und Bildlauf werden anschließend eingerichtet.');
     if (existing && profile.baseUrl !== existing.baseUrl) { profile.authRef = null; profile.authType = 'none'; profile.capabilities = []; profile.contextLimit = null; }
     const index = next.profiles.findIndex(p => p.id === profile.id);
     if (index >= 0) next.profiles[index] = profile;
@@ -71,6 +72,9 @@ export class SettingsStore {
     if (next.activeId === profile.id && !profile.enabled) next.activeId = null;
     next.excludedModels = next.excludedModels.filter(p => !(p.baseUrl === profile.baseUrl && p.type === profile.type && p.model === profile.model));
     return this.commit(next);
+  }
+  async setUpdateRepository(url) {
+    return this.commit({ ...this.snapshot(), updateRepository: repositoryUrl(githubSource(url)) });
   }
   async importServer({ name, baseUrl, allowHttp, models, authRef, authType, type = 'ollama', restoreRemoved = false }) {
     if (typeof name !== 'string' || !name.trim() || name.length > 30) throw new Error('Servername muss zwischen 1 und 30 Zeichen lang sein.');
@@ -83,7 +87,7 @@ export class SettingsStore {
       if (restoreRemoved) next.excludedModels = next.excludedModels.filter(p => !sameModel(p));
       const existing = next.profiles.find(sameModel);
       const reportedLimit = Number.isInteger(info.contextLimit) && info.contextLimit > 0 ? info.contextLimit : null;
-      const chatCapable = modelType !== 'comfyui' && (!info.capabilities?.includes('embedding') || info.capabilities.includes('completion'));
+      const chatCapable = !info.capabilities?.includes('embedding') || info.capabilities.includes('completion');
       const modelProfile = validateProfile({
         ...existing, id: existing?.id ?? randomUUID(), name: existing?.name ?? `${name.trim()} · ${info.name}`.slice(0, 60),
         type: modelType, baseUrl: origin, model: info.name, enabled: chatCapable && (existing?.enabled ?? false), allowHttp, authRef, authType,

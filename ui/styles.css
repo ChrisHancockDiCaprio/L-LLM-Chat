@@ -178,3 +178,12 @@ dialog::backdrop { background: #15271c60; backdrop-filter: blur(3px); }
 .server-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .danger-button.secondary-button { color: #9b493d; }
 #delete-confirm { position: sticky; top: 0; z-index: 2; border: 1px solid #e1c59b; }
+#update-repository { width: 100%; margin: 12px 0 0; }
+#update-source-feedback { overflow-wrap: anywhere; }
+#image-options { padding: 8px 14px; font-size: 11px; }
+#image-options input, #update-repository { border: 1px solid #d5e0c8; border-radius: 7px; padding: 8px; font: inherit; background: white; }
+#image-options input { width: 100%; min-width: 0; }
+#image-options summary { cursor: pointer; color: #536d45; }
+#image-options .model-options-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+#workflow-mappings label { display: block; margin: 12px 0 6px; font-size: 12px; }
+.image-download { align-self: start; }

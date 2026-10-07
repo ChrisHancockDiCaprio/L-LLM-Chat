@@ -1,5 +1,17 @@
 # Änderungen
 
+## 0.2.2 · 7. Oktober 2026
+
+- Update-Repository in den Einstellungen frei wählbar; HTTPS-GitHub-Adresse prüfen und verschlüsselt speichern. Falsche/nicht öffentliche Quellen ändern die bestehende Quelle nicht.
+- Öffentliche Releases und fehlende Windows-Assets werden unterschieden. Updatevorgänge sperren den Quellenwechsel; ein Wechsel verwirft eine alte Updateauswahl und erfordert eine neue Versionsprüfung.
+- Getrenntes ComfyUI-Bild-Backend: API-Workflow importieren, Prompt, Negative Prompt, Breite, Höhe, Schritte und Seed direkten Node-Eingängen zuordnen; gespeicherten Bild-Ausgabe-Node wählen.
+- Native Ausführung über POST /prompt, Statusabfrage /history/{prompt_id} und Bildabruf /view. Keine Ollama-/OpenAI-Erkennung für ComfyUI. Polling statt WebSocket; kein Prozentfortschritt aus der History-API.
+- Bilder erscheinen als verschlüsselt gespeicherte Chat-Anhänge; „Bild speichern“ exportiert die Bildbytes auf ausdrücklichen Klick in den gewählten Ordner.
+- Abbruch stoppt lokale Abfragen; kein globales /interrupt, damit andere Serveraufträge nicht abgebrochen werden.
+- 66 Tests und isolierter Electron-Fenstertest bestanden. GitHub öffentlich und ComfyUI erreichbar; tatsächlicher Qwen-Image-Lauf wartet auf den Benutzer-Workflow. Automatische Installation unsignierter Updates bleibt gesperrt.
+- Finales Setup besteht neun Verzeichnis-Prüfungen ohne Installation. Die gepackte unsignierte Programmdatei wird von der Windows-Anwendungssteuerung blockiert; kein bestätigter finaler Installationslauf. Bestehende 0.2.0 bleibt unverändert.
+
+
 ## 0.2.1 · 7. Oktober 2026
 
 - Gespeicherte Server werden beim Start auf neue Modelle geprüft; Auswahl, Aktivierung und Parameter bleiben erhalten.

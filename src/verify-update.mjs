@@ -1,23 +1,32 @@
 import assert from 'node:assert/strict';
-import { writeFile } from 'node:fs/promises';
+import { writeFile, readFile } from 'node:fs/promises';
+import { dialog } from 'electron';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { SettingsStore } from './settings-store.mjs';
 import { CredentialStore } from './credential-store.mjs';
 import { SessionStore } from './session-store.mjs';
 
-export async function verifyUpdate({ root, dataDir, window, store, settings, credentials, workflows, cipher, publish, snapshot }) {
+export async function verifyUpdate({ root, dataDir, window, store, settings, credentials, workflows, attachments, cipher, publish, snapshot }) {
   const run = code => window.webContents.executeJavaScript(code);
   const json = data => new Response(JSON.stringify(data));
   const previousFetch = globalThis.fetch;
+  const previousSaveDialog = dialog.showSaveDialog;
+  const imageBytes = await readFile(join(root, 'assets/icon.png'));
+  const exportFile = join(dataDir, 'fixture-export.png');
+  dialog.showSaveDialog = async () => ({ canceled: false, filePath: exportFile });
   globalThis.fetch = async (url, init) => {
     assert.equal(init.redirect, 'error');
+    if (url.includes('api.github.com')) return url.endsWith('/releases/latest') ? new Response('', { status: 404 }) : json({ private: false, full_name: 'FixtureOwner/FixtureUpdates' });
     if (url.includes('gateway.example')) {
       assert.equal(init.headers.Authorization, 'Bearer FAKE-UI-TEST-KEY');
       return json({ data: [{ id: 'old-alias' }, { id: 'new-alias' }] });
     }
     if (url.endsWith('/system_stats')) return json({ system: { os: 'linux' } });
     if (url.endsWith('/object_info')) return json({ UnetLoaderGGUF: { input: { required: { unet_name: [['Qwen-Image-2.1.gguf']] } } } });
+    if (url.endsWith('/prompt')) { const body = JSON.parse(init.body); assert.equal(body.prompt['1'].inputs.text, 'UI-COMFY-PROMPT'); assert.equal(body.prompt['3'].inputs.width, 768); assert.equal(body.prompt['4'].inputs.seed, 8); return json({ prompt_id: 'ui-prompt' }); }
+    if (url.endsWith('/history/ui-prompt')) return json({ 'ui-prompt': { status: { completed: true, status_str: 'success' }, outputs: { '5': { images: [{ filename: 'ui-image.png', subfolder: '', type: 'output' }] } } } });
+    if (url.includes('/view?')) return new Response(imageBytes);
     throw new Error('Unexpected fixture request');
   };
   const report = { version: snapshot().updates.version };
@@ -53,16 +62,39 @@ export async function verifyUpdate({ root, dataDir, window, store, settings, cre
     const added = await run(`window.qwenChat.addServer({type: 'comfyui', name: 'ComfyUI', baseUrl: 'https://comfy.example', auth: {type: 'none'}})`); assert.ok(added.ok);
     const comfy = settings.db.profiles[0]; assert.equal(comfy.type, 'comfyui'); assert.equal(comfy.enabled, false);
     report.comfyConnectionPrepared = comfy.serverInfo.ggufAvailable;
-    await workflows.import(comfy.baseUrl, 'api-workflow.json', { '1': { class_type: 'CLIPTextEncode', inputs: { text: 'WORKFLOW-UI-PRIVATE' } } }); publish();
+    const graph = { '1': { class_type: 'CLIPTextEncode', inputs: { text: 'WORKFLOW-UI-PRIVATE' } }, '2': { class_type: 'CLIPTextEncode', inputs: { text: '' } }, '3': { class_type: 'EmptyLatentImage', inputs: { width: 1024, height: 1024 } }, '4': { class_type: 'KSampler', inputs: { steps: 20, seed: 1, positive: ['1', 0] } }, '5': { class_type: 'SaveImage', inputs: { images: ['4', 0] } } };
+    assert.equal((await run(`window.qwenChat.toggleProfile(${JSON.stringify(comfy.id)}, true)`)).ok, false);
+    await workflows.import(comfy.baseUrl, 'api-workflow.json', graph); publish();
     report.workflowSummaryVisible = await run(`document.querySelector('#profile-list').textContent.includes('api-workflow.json') && !document.querySelector('#profile-list').textContent.includes('WORKFLOW-UI-PRIVATE')`); assert.ok(report.workflowSummaryVisible);
+    const mapping = { prompt: { nodeId: '1', input: 'text' }, negativePrompt: { nodeId: '2', input: 'text' }, width: { nodeId: '3', input: 'width' }, height: { nodeId: '3', input: 'height' }, steps: { nodeId: '4', input: 'steps' }, seed: { nodeId: '4', input: 'seed' }, outputNode: '5' };
+    await run(`document.querySelector('.workflow-configure').click();`);
+    for (const [field, target] of Object.entries(mapping)) await run(`document.querySelector(${JSON.stringify(field === 'outputNode' ? '#workflow-output' : '#mapping-' + field)}).value = ${JSON.stringify(field === 'outputNode' ? target : JSON.stringify(target))}`);
+    await run(`document.querySelector('#workflow-form').requestSubmit()`);
+    await until(() => !snapshot().settingsBusy && workflows.summary(comfy.baseUrl).ready);
+    report.workflowMappingSaved = true;
+    assert.equal((await run(`window.qwenChat.toggleProfile(${JSON.stringify(comfy.id)}, true)`)).ok, true);
+    assert.equal((await run(`window.qwenChat.selectProfile(${JSON.stringify(comfy.id)})`)).ok, true);
+    await run(`document.querySelector('#settings-dialog').close(); document.querySelector('#image-width').value = '768'; document.querySelector('#image-seed').value = '8'; document.querySelector('#message-input').value = 'UI-COMFY-PROMPT'; document.querySelector('#chat-form').requestSubmit();`);
+    await until(() => !snapshot().busy && store.active.messages.some(m => m.role === 'assistant' && m.attachmentIds?.length));
+    report.comfyImageRendered = await run(`Boolean(document.querySelector('#messages .chat-attachment img')?.src.startsWith('data:image/png;base64,'))`); assert.ok(report.comfyImageRendered);
+    await run(`document.querySelector('.image-download').click()`);
+    await until(async () => { try { return (await readFile(exportFile)).equals(imageBytes); } catch { return false; } });
+    assert.deepEqual(await readFile(exportFile), imageBytes); report.imageExportMatches = true;
+    window.showInactive(); await run(`document.querySelector('#image-options').open = true; new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+    await new Promise(resolve => setTimeout(resolve, 200)); await writeFile(join(root, 'preview-comfy-chat.png'), (await window.webContents.capturePage()).toPNG()); window.hide();
+    await run(`document.querySelector('#settings-button').click(); document.querySelector('#tab-updates').click(); document.querySelector('#update-repository').value = 'https://github.com/FixtureOwner/FixtureUpdates'; document.querySelector('#update-repository').dispatchEvent(new Event('input')); document.querySelector('#update-source-form').requestSubmit();`);
+    await until(() => !snapshot().settingsBusy && settings.db.updateRepository === 'https://github.com/FixtureOwner/FixtureUpdates');
+    report.updateSourceSavedAndNoReleaseExplained = await run(`document.querySelector('#update-source-status').textContent.includes('Noch kein stabiles Release')`); assert.ok(report.updateSourceSavedAndNoReleaseExplained);
+    const rejected = await run(`window.qwenChat.saveUpdateRepository('https://foreign.example/repo')`); assert.equal(rejected.ok, false); assert.equal(settings.db.updateRepository, 'https://github.com/FixtureOwner/FixtureUpdates'); report.invalidSourceKeepsPrevious = true;
     window.showInactive(); await run(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
     await new Promise(resolve => setTimeout(resolve, 200));
     await writeFile(join(root, 'preview-update-settings.png'), (await window.webContents.capturePage()).toPNG());
     window.hide();
     const restoredSettings = new SettingsStore(dataDir, cipher); const restoredCredentials = new CredentialStore(dataDir, cipher); const restoredHistory = new SessionStore(dataDir, cipher);
     await restoredSettings.load(); await restoredCredentials.load(); await restoredHistory.load();
-    report.encryptedRestartPreservesChangesAndChats = restoredSettings.db.profiles[0].type === 'comfyui' && !Object.keys(restoredCredentials.db.entries).length && restoredHistory.active.messages[0].content === 'UPDATE-UI-HISTORY'; assert.ok(report.encryptedRestartPreservesChangesAndChats);
+    report.encryptedRestartPreservesChangesAndChats = restoredSettings.db.profiles[0].type === 'comfyui' && !Object.keys(restoredCredentials.db.entries).length && restoredHistory.active.messages[0].content === 'UPDATE-UI-HISTORY' && restoredSettings.db.updateRepository === 'https://github.com/FixtureOwner/FixtureUpdates'; assert.ok(report.encryptedRestartPreservesChangesAndChats);
+    const generated = restoredHistory.active.messages.find(m => m.attachmentIds?.length); assert.ok(generated); assert.ok(attachments.get(generated.attachmentIds[0]));
     await writeFile(join(root, 'verification-update.json'), JSON.stringify(report, null, 2)); return report;
-  } finally { globalThis.fetch = previousFetch; }
+  } finally { globalThis.fetch = previousFetch; dialog.showSaveDialog = previousSaveDialog; }
 }
-async function until(predicate) { for (let n = 0; n < 150; n++) { if (predicate()) { await new Promise(resolve => setTimeout(resolve, 80)); return; } await new Promise(resolve => setTimeout(resolve, 80)); } throw new Error('Update UI verification timed out'); }
+async function until(predicate) { for (let n = 0; n < 150; n++) { if (await predicate()) { await new Promise(resolve => setTimeout(resolve, 80)); return; } await new Promise(resolve => setTimeout(resolve, 80)); } throw new Error('Update UI verification timed out'); }

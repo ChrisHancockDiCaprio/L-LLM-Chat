@@ -2,7 +2,7 @@
 
 ## Umgesetzt
 
-Seit 0.2.1 werden importierte ComfyUI-API-Workflows ebenfalls mit Windows DPAPI verschlüsselt als `workflows.vault` gespeichert. Die Oberfläche erhält nur Name und Knotenzahl. Verbindungslöschung bereinigt ungenutzte Zugänge und Workflows; alte verschlüsselte Versionssicherungen bleiben erhalten.
+Seit 0.2.1 werden importierte ComfyUI-API-Workflows ebenfalls mit Windows DPAPI verschlüsselt als `workflows.vault` gespeichert. Seit 0.2.2 werden auch Node-Zuordnung und Bildparameter verschlüsselt gespeichert. Die Oberfläche erhält Name, Knotenzahl, Zuordnung und direkte Eingangsbezeichnungen, aber nicht den vollständigen Graphen oder seine ursprünglichen Prompt-Inhalte. Verbindungslöschung bereinigt ungenutzte Zugänge und Workflows; alte verschlüsselte Versionssicherungen bleiben erhalten.
 
 Verbindungen, Modellparameter und Auswahl liegen verschlüsselt in `settings.vault`, Zugangsdaten getrennt in `credentials.vault`, Gespräche in `history.vault`. Der normale Speicherort ist `%LOCALAPPDATA%\QwenChat\Vault`, außerhalb des Quellcodes und des Projektordners. Electron-Betriebsdateien liegen daneben unter `App`. Im Projekt wird kein Schlüssel und keine neue Klartextkonfiguration angelegt.
 
@@ -59,3 +59,11 @@ Kreativität, Kontextfenster und Antwortlimit sind Ollama-Anfrageparameter diese
 Originalanhänge werden separat mit DPAPI verschlüsselt. Die Oberfläche erhält nur Anhangsvorschauen ohne lokale Dateipfade. Kein Ausführen von Dateien, keine externen Bild-URLs, keine SVG-Anhänge und keine Klartext-Arbeitskopien. Ausgewählte Originaldateien werden nicht verändert. Zugänge zum Bildserver unterliegen denselben HTTPS-/Origin-Regeln. Details: BILDER-UND-DATEIEN.md.
 
 Programm und Tresor sind getrennt. Updates und Deinstallation bewahren den externen Tresor; private GitHub-Zugänge werden nicht eingebettet. Unsignierte Pilot-Updates werden nicht automatisch installiert. Details: INSTALLATION-UND-UPDATES.md.
+
+## ComfyUI und Updatequellen ab 0.2.2
+
+ComfyUI verwendet dieselbe origin-gebundene Transportprüfung: Zugangsdaten nur über HTTPS, keine Weiterleitungen, HTTP im privaten Heimnetz nur nach ausdrücklicher Freigabe und ohne Zugangsdaten. Der Bildlauf sendet ausschließlich den importierten Workflow mit zugeordneten Parametern an den gespeicherten ComfyUI-Server. Bilder werden nur aus dem gewählten Ausgabe-Node und dessen output-Verzeichnis geladen; Fremd-URLs und Pfadtraversal werden abgelehnt. Antwortgrößen, Wartezeit und Bildmaße sind begrenzt. Workflows können Custom Nodes mit serverseitigen Aktionen enthalten; nur eigene oder vertrauenswürdige Workflows importieren.
+
+„Bild speichern“ erstellt auf ausdrückliche Auswahl eine gewöhnliche PNG-/JPEG-/WebP-Datei außerhalb des Tresors. Diese exportierte Kopie ist nicht durch die App verschlüsselt. Der Anhang im Chat bleibt verschlüsselt.
+
+Updatequellen werden ausschließlich als öffentliche HTTPS-GitHub-Repositories akzeptiert und im verschlüsselten Einstellungs-Tresor gespeichert. Repository-Erreichbarkeit und vorhandene Assets bestätigen keine vertrauenswürdige Herausgebersignatur. Die feste Signierungs-/Installationssperre wird durch einen Quellenwechsel nicht aufgehoben.

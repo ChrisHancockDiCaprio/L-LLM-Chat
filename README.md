@@ -1,6 +1,6 @@
 # Qwen Chat für Windows
 
-Für die Windows-Installation das Setup öffnen. Details: **INSTALLATION-UND-UPDATES.md**. Im Entwicklungsordner mit **Start-Qwen.cmd** öffnen. Die App verbindet sich mit der ausgewählten Ollama- oder OpenAI-kompatiblen Chat-KI und öffnet ein eigenes Chatfenster mit Historie. Änderungen in 0.2.1 und ComfyUI-Vorbereitung: **SERVER-UND-COMFYUI.md**.
+Für die Windows-Installation das Setup öffnen. Details: **INSTALLATION-UND-UPDATES.md**. Im Entwicklungsordner mit **Start-Qwen.cmd** öffnen. Die App verbindet sich mit der ausgewählten Ollama- oder OpenAI-kompatiblen Chat-KI und öffnet ein eigenes Chatfenster mit Historie. Version 0.2.2: variable Updatequelle und natives ComfyUI-Bild-Backend. Einrichtung: **SERVER-UND-COMFYUI.md**.
 
 ## Server und Modelle
 
@@ -33,7 +33,7 @@ Normale Benutzerdaten liegen außerhalb des Projekts unter **%LOCALAPPDATA%\\Qwe
 - settings.vault: Verbindungen, Modellparameter und Auswahl.
 - credentials.vault: getrennte API-Schlüssel und Benutzername/Passwort.
 - history.vault: Gespräche.
-- workflows.vault: importierte ComfyUI-API-Workflows, sofern vorhanden.
+- workflows.vault: importierte ComfyUI-API-Workflows, Node-Zuordnungen und Bildparameter.
 
 Windows DPAPI über Electrons asynchrones safeStorage schützt die Dateien. Es gibt keinen Klartext-Ersatzspeicher. Alte data/history.json und data/settings.json werden beim Start automatisch übernommen; die Klartextquellen werden erst nach geprüfter verschlüsselter Speicherung entfernt. Auch alte Historie-/Einstellungen-Sicherungen werden verschlüsselt übernommen. Beschädigte Tresore bleiben erhalten und blockieren den Start.
 
@@ -51,8 +51,8 @@ Der ursprüngliche Anfragebaustein src/ollama-request.mjs stammt aus dem geprüf
 
 Electron 44.6.0 ist lokal installiert. Die Oberfläche ist isoliert, hat keinen allgemeinen Dateisystem-/Shellzugriff und lädt keine externen Webinhalte. Ein eigener Windows-x64-Installer mit SoL-Icon ist erstellt; die Pilotversion ist noch nicht signiert. Updates und Datenablage: INSTALLATION-UND-UPDATES.md.
 
-- npm.cmd test: 56 automatisierte Prüfungen für Netzwerkanfragen, Verlauf, Verschlüsselung, Migration, HTTP-Sperren und Serververwaltung.
-- npm.cmd run verify:update: isolierter Electron-Fenstertest für 0.2.1 mit künstlichen Servern; Hintergrundklick, Löschbestätigung, neues Modell und verschlüsselter Neustart.
+- npm.cmd test: 66 automatisierte Prüfungen für Netzwerkanfragen, Verlauf, Verschlüsselung, Migration, HTTP-Sperren und Serververwaltung.
+- npm.cmd run verify:update: isolierter Electron-Fenstertest mit künstlichen Servern; Modellverwaltung, ComfyUI-Bild im Chat und Export, variable Updatequelle sowie verschlüsselter Neustart.
 - npm.cmd run verify: isolierter echter Electron-/Ollama-Test. Verwendet einen separaten verschlüsselten Testtresor; reale Benutzerchats werden nicht geöffnet oder verändert. Die bisherige isolierte Testkonfiguration wird bei ihrem ersten Lauf übernommen. Ohne Testserver-Konfiguration ist ein frisches Testprofil offline.
 - npm.cmd ci, danach node node_modules/electron/install.js: Abhängigkeiten und offizielle Electron-Laufzeit erneut einrichten.
 - In einer Codex-Umgebung gegebenenfalls ELECTRON_RUN_AS_NODE entfernen; Start-Qwen.cmd berücksichtigt dies bereits.

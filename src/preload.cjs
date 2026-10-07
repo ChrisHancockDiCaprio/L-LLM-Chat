@@ -4,8 +4,10 @@ contextBridge.exposeInMainWorld('qwenChat', {
   checkUpdates: () => ipcRenderer.invoke('updates:check'),
   downloadUpdate: () => ipcRenderer.invoke('updates:download'),
   installUpdate: () => ipcRenderer.invoke('updates:install'),
+  saveUpdateRepository: url => ipcRenderer.invoke('updates:source', url),
   check: () => ipcRenderer.invoke('chat:check'),
-  send: (text, attachmentIds) => ipcRenderer.invoke('chat:send', text, attachmentIds),
+  send: (text, attachmentIds, imageOptions) => ipcRenderer.invoke('chat:send', text, attachmentIds, imageOptions),
+  exportImage: id => ipcRenderer.invoke('attachments:export', id),
   attach: () => ipcRenderer.invoke('attachments:add'),
   removeAttachment: id => ipcRenderer.invoke('attachments:remove', id),
   cancel: () => ipcRenderer.invoke('chat:cancel'),
@@ -19,6 +21,7 @@ contextBridge.exposeInMainWorld('qwenChat', {
   refreshServer: id => ipcRenderer.invoke('settings:refresh', id),
   removeProfile: (id, wholeServer = false) => ipcRenderer.invoke('settings:remove', id, wholeServer),
   importWorkflow: id => ipcRenderer.invoke('settings:workflow', id),
+  configureWorkflow: (id, mapping, options) => ipcRenderer.invoke('settings:workflow-config', id, mapping, options),
   onState: handler => {
     const listener = (_event, state) => handler(state);
     ipcRenderer.on('chat:update', listener);

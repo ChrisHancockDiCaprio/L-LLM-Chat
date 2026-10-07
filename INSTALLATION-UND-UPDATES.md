@@ -1,7 +1,7 @@
-# Qwen Chat 0.2.1 installieren
+# Qwen Chat 0.2.2 installieren
 
 1. Eine laufende Qwen-Chat-App schließen, nachdem Antworten und Eingaben abgeschlossen sind.
-2. `Qwen-Chat-Setup-0.2.1-x64.exe` öffnen. Diese Pilotversion ist noch ohne Windows-Herausgeberzertifikat; die Windows-Anwendungssteuerung kann die Ausführung blockieren. Sicherheitsrichtlinien nicht verändern.
+2. `Qwen-Chat-Setup-0.2.2-x64.exe` öffnen. Diese Pilotversion ist noch ohne Windows-Herausgeberzertifikat; die Windows-Anwendungssteuerung kann die Ausführung blockieren. Sicherheitsrichtlinien nicht verändern.
 3. Programmordner wählen. Die Installation erfolgt für das aktuelle Windows-Konto. Node.js, Electron oder Python müssen auf dem Zielrechner nicht separat installiert werden.
 4. Über Startmenü oder Desktopverknüpfung öffnen. Bestehende Verbindungen und Chats desselben Windows-Kontos werden übernommen. Bei einer frischen Installation Server hinzufügen und Modelle ausdrücklich aktivieren.
 
@@ -17,7 +17,7 @@ Windows DPAPI bindet die Dateien an das Windows-Benutzerkonto. Eine Kopie des Tr
 
 Vorgesehene Quelle: https://github.com/ChrisHancockDiCaprio/L-LLM-Chat.
 
-Das Repository bleibt auf Benutzerwunsch privat. Die App ist für spätere öffentliche Releases vorbereitet, enthält keinen GitHub-Zugang und kann private Releases deshalb nicht abrufen. Vorerst Setup-Dateien direkt oder nach Anmeldung auf GitHub beziehen. Das Veröffentlichen des Repositorys wird nicht automatisch vorgenommen.
+Der Benutzer hat das Repository öffentlich gestellt. Die App benötigt für öffentliche Updates keinen GitHub-Zugang. Unter **Einstellungen → Updates → GitHub-Repository für Updates** kann eine andere Repository-Hauptadresse eingetragen werden. **Prüfen & speichern** prüft öffentliche Erreichbarkeit und veröffentlichte Windows-Assets und übernimmt die Adresse verschlüsselt in `settings.vault`. Fehlgeschlagene Prüfungen behalten die alte Quelle bei. Noch fehlende Releases blockieren das Speichern nicht; Entwürfe zählen nicht als veröffentlichte Updates. Während eines Updatevorgangs bleibt die Quelle gesperrt. Nach einem bereits geladenen Update ist vor dem Quellenwechsel ein App-Neustart erforderlich.
 
 Die installierte App hat einen Updates-Reiter zum Prüfen und ausdrücklichen Herunterladen. SHA-512 und Transportprüfung ersetzen keine Herausgebersignatur. Die automatische Installation ist in der unsignierten Pilotversion fest gesperrt, ebenso automatische Downloads und Installation beim Beenden. Für eine spätere Freigabe werden ein gültiges Windows-Code-Signing-Zertifikat, verifizierte signierte Installer und eine an den erwarteten Herausgeber gebundene Prüfung benötigt. Die vorhandene Sicherungs-/Neustartlogik allein hebt diese Sperre nicht auf.
 
@@ -35,6 +35,8 @@ Die Update-Vorbereitung kann verschlüsselte Kopien aller erforderlichen Tresord
 Das Icon ist das unveränderte SVG des SoL-Weltenatlas. PNG und Windows-ICO sind daraus abgeleitet.
 
 ## Lokale Verifikation
+
+Version 0.2.2: 66 automatisierte Prüfungen und isolierter Electron-Fenstertest bestanden. Der Fenstertest deckt eine vollständige native ComfyUI-Anfrage mit künstlichen Antworten, Parameterzuordnung, Bildanzeige, Datei-Export und verschlüsselte Speicherung ab. Repositorywechsel, ungültige Adresse und öffentlicher Release-Status wurden ebenfalls geprüft. GitHub ist ohne Anmeldung erreichbar, hat aber derzeit noch kein stabiles veröffentlichtes Release. ComfyUI auf Port 8188 ist jetzt erreichbar und meldet GGUF-Knoten. Der echte Qwen-Image-Lauf wartet auf den Benutzer-Workflow und seine Zuordnungen. Es wurde kein realer Benutzer-Tresor verändert. Der Build liegt separat in `dist-update-0.2.2`. Alle neun Verzeichnis-Prüfungen des finalen Setups bestanden ohne Installation. Die gepackte unsignierte Programmdatei 0.2.2 wird weiterhin von der Windows-Anwendungssteuerung blockiert; eine finale Installation und der Start dieser Programmdatei sind nicht bestätigt. Die laufende 0.2.0 bleibt unverändert. Das Paket enthält keine Benutzer-Tresore oder Entwicklungslaufzeit.
 
 Version 0.2.1: 56 automatisierte Prüfungen und ein eigener isolierter Fenstertest bestanden. Eine frühere gepackte 0.2.1-Ausgabe öffnete den vorhandenen 0.2.0-Testtresor einschließlich Chat, Modellauswahl, Zugang und Bild. Die finale Setup-Datei bestand neun Verzeichnisprüfungen im reinen Prüfmodus, ohne Installation: Tresor, Unterordner, Elternordner, Laufwerkswurzel, Groß-/Kleinschreibung, ..-Normalisierung, normaler Programmordner, ähnlich benannter Nachbar und neuer sicherer Ordner. Eine Schwäche bei abschließenden Pfadtrennern und noch nicht angelegten Verzeichnissen wurde dabei korrigiert.
 

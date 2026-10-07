@@ -95,7 +95,8 @@ test('ComfyUI checks native stats and object_info, inventories GGUF models and r
   }, async () => {
     const models = await inspectServer(p); assert.equal(models[0].serverInfo.ggufAvailable, true); assert.deepEqual(models[0].serverInfo.modelFiles, ['Qwen-Image-2.1.gguf']);
     const { settings } = await stores(); await settings.importServer({ ...p, name: 'ComfyUI', models }); assert.equal(settings.db.profiles[0].enabled, false);
-    await assert.rejects(() => settings.toggle(settings.db.profiles[0].id, true), /vorbereitet/);
+    await settings.toggle(settings.db.profiles[0].id, true);
+    await settings.importServer({ ...p, name: 'ComfyUI', models }); assert.equal(settings.db.profiles[0].enabled, true);
   });
   const urls = comfyEndpoints({ baseUrl: 'https://comfy.example' }, 'client-id', 'prompt-id');
   assert.equal(urls.ws, 'wss://comfy.example/ws?clientId=client-id'); assert.equal(urls.prompt, 'https://comfy.example/prompt'); assert.equal(urls.history, 'https://comfy.example/history/prompt-id');
