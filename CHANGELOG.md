@@ -1,5 +1,9 @@
 # Änderungen
 
+## 0.3.2 · Installer-Build
+
+Buildkorrektur für die GitHub-Veröffentlichung: optionale native SSH-Beschleuniger nicht neu bauen, NSIS-Anpassung nur im Hauptprozess laden. Funktionen und Datenspeicher von 0.3.1 bleiben erhalten.
+
 ## 0.3.1 · SSH und sichere Auftragszustände
 
 Optionale SSH-Tunnel, Hostschlüsselprüfung, unbegrenztes Warten auf die ursprüngliche Antwort, verschlüsselte ComfyUI-Auftragszuordnung und Wiederabruf. Offline-Aktivierung verhindert und Einstellungen während Anfragen gesperrt. Details: SSH-UND-AUFTRAEGE.md.

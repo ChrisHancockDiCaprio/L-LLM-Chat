@@ -1,7 +1,7 @@
 {
   "name": "qwen-chat-windows",
   "productName": "KAIROS",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "type": "module",
   "main": "src/main.mjs",
@@ -10,7 +10,7 @@
     "test": "node --test test/*.test.mjs",
     "verify": "electron . --verify",
     "verify:update": "electron . --verify-update",
-    "dist": "node --require ./scripts/nsis-static-uninstaller.cjs node_modules/electron-builder/cli.js --config electron-builder.config.cjs --publish never",
+    "dist": "node scripts/build-windows.cjs --config electron-builder.config.cjs --publish never",
     "dist:msi": "node node_modules/electron-builder/cli.js --config electron-builder.msi.config.cjs --publish never"
   },
   "devDependencies": {
