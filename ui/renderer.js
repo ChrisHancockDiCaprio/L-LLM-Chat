@@ -112,8 +112,14 @@ function render(next) {
     const author = document.createElement('strong'); author.textContent = message.role === 'assistant' ? (message.model ?? 'KI') : 'Du';
     const stamp = document.createElement('time'); stamp.textContent = time(message.createdAt); stamp.dateTime = message.createdAt;
     header.append(author, stamp);
-    const body = document.createElement('div'); body.className = 'message-body'; body.textContent = message.content;
+    const body = document.createElement('div'); body.className = 'message-body';
+    if(message.role === 'assistant') kairosRichText.render(body, message.content);
+    else body.textContent = message.content;
     main.append(header, body);
+    if(message.role === 'assistant' && message.state === 'complete') {
+      const speak=document.createElement('button');speak.type='button';speak.className='secondary-button';speak.textContent='♪ Im Sprachstudio öffnen';
+      speak.addEventListener('click',()=>kairosTts.useText(kairosRichText.text(body)));main.append(speak);
+    }
     for (const attachment of message.attachments ?? []) {
       const block = document.createElement('div'); block.className = 'chat-attachment';
       if (attachment.kind === 'image') {
@@ -140,6 +146,7 @@ function render(next) {
   renderSettings();
   renderUpdates();
   renderJobs();
+  kairosTts.render(state);
   $('#conversation').scrollTop = $('#conversation').scrollHeight;
 }
 function renderUpdates() {

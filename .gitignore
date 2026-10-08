@@ -10,3 +10,4 @@ work/
 preview*.png
 verification*.json
 *.log
+__pycache__/

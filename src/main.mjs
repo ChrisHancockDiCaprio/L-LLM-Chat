@@ -2,7 +2,8 @@ import { JobStore, boundJob, connectionIdentity } from './job-store.mjs';
 import { SSHStore, validateSSH, apiDestination } from './ssh-store.mjs';
 import { TunnelManager } from './tunnel-manager.mjs';
 import { createHash } from 'node:crypto';
-import { app, BrowserWindow, ipcMain, Menu, session, safeStorage, dialog, nativeImage } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, session, safeStorage, dialog, nativeImage, shell } from 'electron';
+import { registerTts } from './tts-service.mjs';
 import { dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, readFileSync, existsSync } from 'node:fs';
@@ -39,14 +40,14 @@ app.commandLine.appendSwitch('disk-cache-size', '0');
 app.setName('KAIROS');
 if (!app.requestSingleInstanceLock()) { app.quit(); }
 else {
-  let window; let controller; let busy = false; let checking; let settingsBusy = false; let checkEpoch = 0;
+  let tts; let window; let controller; let busy = false; let checking; let settingsBusy = false; let checkEpoch = 0;
   let connection = { state: 'checking', message: 'Verbindung wird geprüft …' };
   let notice = ''; let omittedRounds = 0; let imageProgress = null;
   let jobs; let sshStore; let tunnels; let activeJob; let currentServerStop; let jobAction = false; let actionController; let shuttingDown=false;
   let cipher; let store; let settings; let credentials; let workflows; let updates; let attachments; let closing = false; let updating = false;
   const drafts = new Set();
   const profileHealth = {};
-  const snapshot = () => ({ ...store.db, jobs: jobs?.snapshot().map(j=>({...j,bindingOK:boundJob(j,settings?.db?.profiles.find(p=>p.id===j.profileId))})), tunnels: tunnels?.snapshot(), activeJobId: activeJob?.id, jobAction, sessions: store.db.sessions.map(s => ({...s, messages: s.messages.map(m => ({...m, attachments: (m.attachmentIds ?? []).map(id => attachments.preview(id)) }))})), settings: settings.snapshot(), workflows: Object.fromEntries(settings.db.profiles.filter(p => p.type === 'comfyui').map(p => [p.id, workflows.summary(p)])), profileHealth, settingsBusy, connection, busy, notice, omittedRounds, imageProgress, updates: updates?.snapshot(), security: { encrypted: true, vaultDirectory: dataDir } });
+  const snapshot = () => ({ ...store.db, tts: tts?.snapshot(), jobs: jobs?.snapshot().map(j=>({...j,bindingOK:boundJob(j,settings?.db?.profiles.find(p=>p.id===j.profileId))})), tunnels: tunnels?.snapshot(), activeJobId: activeJob?.id, jobAction, sessions: store.db.sessions.map(s => ({...s, messages: s.messages.map(m => ({...m, attachments: (m.attachmentIds ?? []).map(id => attachments.preview(id)) }))})), settings: settings.snapshot(), workflows: Object.fromEntries(settings.db.profiles.filter(p => p.type === 'comfyui').map(p => [p.id, workflows.summary(p)])), profileHealth, settingsBusy, connection, busy, notice, omittedRounds, imageProgress, updates: updates?.snapshot(), security: { encrypted: true, vaultDirectory: dataDir } });
   const publish = () => { if (window && !window.isDestroyed()) window.webContents.send('chat:update', snapshot()); };
   const guard = event => {
     if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Ungültiger Fensteraufruf.');
@@ -164,12 +165,12 @@ else {
   notice = [store.notice, settings.notice].filter(Boolean).join(' ');
   const source = settings.db.updateRepository ? githubSource(settings.db.updateRepository) : JSON.parse(readFileSync(join(root, 'release/update-source.json'), 'utf8'));
   updates = new UpdateManager({ updater: updaterPackage.autoUpdater, packaged: app.isPackaged, source, version: app.getVersion(), beta: settings.db.betaUpdates, notify: publish,
-    isBusy: () => busy || settingsBusy || updating,
+    isBusy: () => busy || settingsBusy || updating || tts?.busy,
     beforeInstall: async () => {
       updating = true;
       try {
         if (drafts.size || await window.webContents.executeJavaScript("Boolean(document.querySelector('#message-input').value.trim())")) throw new Error('Ungesendete Nachricht.');
-        await Promise.all([store.storage.queue, settings.storage.queue, credentials.storage.queue, workflows.storage.queue, jobs.queue, sshStore.queue]);
+        await Promise.all([store.storage.queue, settings.storage.queue, credentials.storage.queue, workflows.storage.queue, jobs.queue, sshStore.queue, tts?.queue]);
         await backupVault(dataDir, cipher, app.getVersion());
       } catch (error) { updating = false; throw error; }
     },
@@ -193,10 +194,10 @@ else {
   window.webContents.on('will-navigate', event => event.preventDefault());
   window.on('close', event => {
     if (closing || updating || verify) return;
-    event.preventDefault(); if(shuttingDown)return;shuttingDown=true;controller?.abort(); actionController?.abort(); tunnels.close();
+    event.preventDefault(); if(shuttingDown)return;shuttingDown=true;tts?.abort();controller?.abort(); actionController?.abort(); tunnels.close();
     void (async () => {
-      while (busy || settingsBusy || jobAction) await new Promise(resolve => setTimeout(resolve, 50));
-      await Promise.all([store.storage.queue, settings.storage.queue, credentials.storage.queue, workflows.storage.queue, jobs.queue, sshStore.queue]);
+      while (busy || settingsBusy || jobAction || tts?.busy) await new Promise(resolve => setTimeout(resolve, 50));
+      await Promise.all([store.storage.queue, settings.storage.queue, credentials.storage.queue, workflows.storage.queue, jobs.queue, sshStore.queue, tts?.queue]);
       closing = true; window.close();
     })().catch(() => { notice = 'Speichern fehlgeschlagen. Das Fenster bleibt zur Sicherheit geöffnet.'; publish(); });
   });
@@ -433,6 +434,11 @@ else {
     } finally { busy = false; imageProgress = null; controller = undefined; activeJob=undefined;currentServerStop=false; publish(); }
   });
 
+  register('chat:open-link', async value => {
+    if(typeof value !== 'string' || value.length > 2048)return {ok:false};
+    try {const url=new URL(value);if(!['https:','http:'].includes(url.protocol)||url.username||url.password)return {ok:false};await shell.openExternal(url.href);return {ok:true};}catch{return {ok:false};}
+  });
+  tts = await registerTts({register,directory:dataDir,cipher,dialog,window,publish,isLocked:()=>busy||settingsBusy||jobAction||updating||shuttingDown});
   await window.loadFile(join(root, 'ui/index.html'));
   if (!verify) await changeSettings(() => refreshServers());
   if (!verifyUpdateOnly) await check();

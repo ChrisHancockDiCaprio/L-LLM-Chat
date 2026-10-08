@@ -20,6 +20,13 @@ jobs:
       - run: npm ci
       - run: node node_modules/electron/install.js
       - run: npm test
+      - run: python server/test_bridge.py
+      - name: Verify isolated Electron UI with fixture servers
+        shell: pwsh
+        run: |
+          Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+          npm run verify:update
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - run: npm run dist
       - name: Keep Windows update metadata available for every release channel
         run: node -e "const fs=require('fs'),p=require('./package.json'),s=require('semver');const f=(s.prerelease(p.version)?.[0]||'latest')+'.yml';if(!fs.existsSync('dist-release/latest.yml'))fs.copyFileSync('dist-release/'+f,'dist-release/latest.yml')"
@@ -33,6 +40,8 @@ jobs:
             dist-release/*.blockmap
             dist-release/latest.yml
             dist-msi-release/*.msi
+            server/qwen_tts_bridge.py
+            QWEN-TTS.md
           if-no-files-found: error
   release:
     if: startsWith(github.ref, 'refs/tags/v')

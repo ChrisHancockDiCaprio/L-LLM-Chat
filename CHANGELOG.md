@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.4.0 · Sprache und Rich Text
+
+- Qwen3-TTS-Sprachstudio im Chat: CustomVoice, VoiceDesign und Base-Cloning mit modellabhängigen Feldern, Referenz-/Transkriptprüfung und optionalen Sampling-Werten.
+- Mitgelieferte Loopback-Serverbrücke für das offizielle Qwen-SDK; Audiovorschau, WAV-Export, Design→Clone und verschlüsselter TTS-Tresor.
+- Sichere Markdown-/HTML-Ausgabe mit Überschriften, Listen, Links, Codeblöcken und Tabellen; lokaler Parser/Sanitizer, enge HTML-Allowlist und unveränderter Chatkontext.
+- Zusätzliche Transport-, Sicherheits-, Persistenz-, Python-HTTP- und echte Electron-UI-Prüfungen im Releaseworkflow.
+
 ## 0.3.2 · Installer-Build
 
 Buildkorrektur für die GitHub-Veröffentlichung: optionale native SSH-Beschleuniger nicht neu bauen, NSIS-Anpassung nur im Hauptprozess laden. Funktionen und Datenspeicher von 0.3.1 bleiben erhalten.

@@ -134,6 +134,7 @@ export async function verifyUpdate({ root, dataDir, window, store, settings, cre
     const deletedId = store.active.id; await run("document.querySelector('#settings-dialog').close(); document.querySelector('#delete-chat').click(); document.querySelector('#chat-delete-confirm').click()");
     await until(() => !store.db.sessions.some(s => s.id === deletedId)); report.chatDeletionViaUI = true;
     assert.equal(await run('document.title'), 'KAIROS');
+    Object.assign(report,await (await import('./verify-tts.mjs')).verifyTts({window,store,publish,dataDir}));
     await writeFile(join(root, 'verification-update.json'), JSON.stringify(report, null, 2)); return report;
   } finally { globalThis.fetch = previousFetch; dialog.showSaveDialog = previousSaveDialog; }
 }

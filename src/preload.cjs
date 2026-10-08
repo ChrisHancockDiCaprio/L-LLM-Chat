@@ -1,5 +1,14 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('qwenChat', {
+  openLink: url => ipcRenderer.invoke('chat:open-link', url),
+  ttsConnect: config => ipcRenderer.invoke('tts:connect', config),
+  ttsReference: () => ipcRenderer.invoke('tts:reference'),
+  ttsClearReference: () => ipcRenderer.invoke('tts:clear-reference'),
+  ttsGenerate: request => ipcRenderer.invoke('tts:generate', request),
+  ttsCancel: () => ipcRenderer.invoke('tts:cancel'),
+  ttsAudio: () => ipcRenderer.invoke('tts:audio'),
+  ttsUseResult: () => ipcRenderer.invoke('tts:use-result'),
+  ttsExport: () => ipcRenderer.invoke('tts:export'),
   checkJob: id => ipcRenderer.invoke('jobs:check',id),
   stopJob: id => ipcRenderer.invoke('jobs:stop',id),
   trustSSHHost: (id,accept) => ipcRenderer.invoke('ssh:trust',id,accept),

@@ -3,9 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
   <title>KAIROS</title>
   <link rel="stylesheet" href="styles.css">
+  <script src="../node_modules/marked/lib/marked.umd.js" defer></script>
+  <script src="../node_modules/dompurify/dist/purify.min.js" defer></script>
+  <script src="rich-text.js" defer></script>
+  <script src="tts.js" defer></script>
   <script src="renderer.js" defer></script>
 </head>
 <body>
@@ -21,12 +25,30 @@
     <header class="topbar"><div><span class="eyebrow">DEIN LOKALER CHAT</span><h1 id="chat-title">Neues Gespräch</h1></div><div class="chat-controls">
       <label class="sr-only" for="active-ai">KI für diesen Chat</label><select id="active-ai" aria-label="KI für die nächste Nachricht"></select>
       <button id="delete-chat" class="secondary-button danger-button" type="button">Chat löschen</button>
+      <button id="tts-toggle" class="secondary-button" type="button" aria-expanded="false" aria-controls="tts-panel">♪ Sprache</button>
       <button id="connection-check" class="connection checking" title="Verbindung erneut prüfen"><span class="status-dot"></span><span id="connection-label">Verbindung prüfen …</span><span class="refresh" aria-hidden="true">↻</span></button>
       </div>
     </header>
     <div id="notice" class="notice" role="status" hidden></div>
     <div id="job-list" aria-live="polite"></div>
     <div id="context-note" class="context-note" hidden></div>
+    <section id="tts-panel" hidden aria-label="Qwen TTS">
+      <div class="tts-heading"><strong>Qwen TTS · Sprachstudio</strong><button id="tts-close" type="button" class="icon-button" aria-label="Sprachstudio schließen">×</button></div>
+      <div class="tts-grid"><label>Serverbrücke<input id="tts-url" type="url" placeholder="http://127.0.0.1:8860"></label><label class="checkbox-label"><input id="tts-http" type="checkbox"> HTTP im privaten Netz erlauben</label><button id="tts-connect" type="button" class="secondary-button">Prüfen &amp; speichern</button></div>
+      <p class="settings-hint">Verbindet die KAIROS-Qwen-TTS-Serverbrücke. Erst prüfen, dann sprechen. Text und Referenzaudio gehen beim Erzeugen an diesen Server.</p>
+      <fieldset id="tts-fields" disabled>
+        <div class="tts-grid"><label>Modus<select id="tts-mode"></select></label><label>Sprache<select id="tts-language"></select></label><label id="tts-speaker-label">Stimme<select id="tts-speaker"></select></label></div>
+        <p id="tts-model" class="settings-hint"></p>
+        <label>Sprachtext<textarea id="tts-text" rows="3" maxlength="4000" placeholder="Text eingeben oder eine Chat-Antwort übernehmen …"></textarea></label>
+        <label id="tts-instruct-label">Stimme / Sprechstil beschreiben<textarea id="tts-instruct" rows="2" maxlength="2000" placeholder="Zum Beispiel: warme, tiefe Stimme; ruhig und freundlich sprechen"></textarea></label>
+        <div id="tts-clone-fields" hidden><div class="server-actions"><button id="tts-reference" type="button" class="secondary-button">Referenz-WAV auswählen</button><span id="tts-reference-name"></span><button id="tts-clear-reference" type="button" class="secondary-button">Referenz entfernen</button></div><p class="settings-hint">Eigene oder freigegebene Stimme, sauberer Clip bis 30 Sekunden / 16 MB.</p><label class="checkbox-label"><input id="tts-xvector" type="checkbox"> Nur Stimmprofil verwenden (ohne Transkript)</label><label id="tts-ref-text-label">Genaues Transkript der Referenz<textarea id="tts-ref-text" rows="2" maxlength="4000"></textarea></label></div>
+        <details><summary>Erweiterte Generierungsparameter</summary><label class="checkbox-label"><input id="tts-advanced" type="checkbox"> Eigene Werte verwenden (sonst Modellvorgaben)</label><div class="tts-grid" id="tts-sampling"><label class="checkbox-label"><input id="tts-sample" type="checkbox" checked> Sampling</label><label>Temperatur<input id="tts-temperature" type="number" min="0.01" max="2" step="0.01" value="0.9"></label><label>Top P<input id="tts-top-p" type="number" min="0.01" max="1" step="0.01" value="1"></label><label>Top K<input id="tts-top-k" type="number" min="1" max="1000" value="50"></label><label>Wiederholungsstrafe<input id="tts-repetition" type="number" min="1" max="2" step="0.01" value="1.05"></label><label>Max. Audiotokens<input id="tts-tokens" type="number" min="64" max="4096" value="2048"></label></div></details>
+        <button id="tts-generate" type="button" class="primary-button">Sprache erzeugen</button>
+      </fieldset>
+      <button id="tts-cancel" type="button" class="secondary-button" hidden>Warten beenden</button>
+      <p id="tts-feedback" role="status"></p>
+      <div id="tts-result" hidden><audio id="tts-audio" controls preload="metadata"></audio><div class="server-actions"><button id="tts-export" type="button" class="secondary-button">WAV speichern</button><button id="tts-use-result" type="button" class="secondary-button">Als Referenzstimme verwenden</button></div><p class="settings-hint">Voice Design lässt sich durch eine neue Beschreibung variieren. Als Referenz speichern und im Cloning-Modus weiterverwenden.</p></div>
+    </section>
     <section id="conversation" class="conversation" aria-label="Chatverlauf" aria-live="polite">
       <div id="welcome" class="welcome">
         <div class="welcome-mark">K<span class="spark">✦</span></div>
