@@ -7,7 +7,7 @@ import { SettingsStore } from './settings-store.mjs';
 import { CredentialStore } from './credential-store.mjs';
 import { SessionStore } from './session-store.mjs';
 
-export async function verifyUpdate({ root, dataDir, window, store, settings, credentials, workflows, attachments, jobs, cipher, publish, snapshot }) {
+export async function verifyUpdate({ root, dataDir, window, store, settings, credentials, workflows, attachments, jobs, cipher, publish, snapshot, updates }) {
   const run = code => window.webContents.executeJavaScript(code);
   const json = data => new Response(JSON.stringify(data));
   const previousFetch = globalThis.fetch;let delayComfy=false;let promptPosts=0;
@@ -136,6 +136,35 @@ export async function verifyUpdate({ root, dataDir, window, store, settings, cre
     assert.equal(await run('document.title'), 'KAIROS');
     Object.assign(report,await (await import('./verify-tts.mjs')).verifyTts({window,store,publish,dataDir}));
     Object.assign(report,await (await import('./verify-math.mjs')).verifyMath({root,window,store,publish}));
+    // Exercise the real IPC, warning configuration, backup and button in an isolated vault.
+    // Only the native dialog response and installer launch are replaced; no installer runs.
+    const previousMessageBox = dialog.showMessageBox; const previousInstall = updates.updater.quitAndInstall;
+    let accept = false; let prompts = 0; let installs = 0;
+    try {
+      dialog.showMessageBox = async (parent, options) => {
+        assert.equal(parent, window); assert.equal(options.type, 'warning');
+        assert.equal(options.defaultId, 0); assert.equal(options.cancelId, 0);
+        assert.match(options.detail, /FixtureOwner\/FixtureUpdates/); assert.match(options.detail, /0\.4\.3/);
+        assert.match(options.message, /Herausgebersignatur/); prompts++; return { response: accept ? 1 : 0 };
+      };
+      updates.updater.quitAndInstall = (silent, restart) => { assert.equal(silent, false); assert.equal(restart, true); installs++; };
+      updates.updater.emit('update-available', { version: '0.4.3' }); updates.updater.emit('update-downloaded');
+      await run("document.querySelector('#message-input').value='';document.querySelector('#settings-button').click();document.querySelector('#tab-updates').click()");
+      await until(async () => !(await run("document.querySelector('#update-install').disabled")));
+      await run("document.querySelector('#update-install').click()");
+      await until(() => prompts === 1 && !updates.snapshot().operationBusy);
+      assert.equal(installs, 0); assert.equal(updates.snapshot().state, 'downloaded');
+      accept = true; await run("document.querySelector('#update-install').click()");
+      await until(() => installs === 1 && !updates.snapshot().operationBusy);
+      assert.equal(prompts, 2);
+      report.unsignedUpdateWarningCancelAndInstall = true;
+      const { readdir } = await import('node:fs/promises');
+      const backups = (await readdir(join(dataDir, 'BeforeUpdate'))).filter(name => !name.endsWith('.pending'));
+      const inventory = JSON.parse(await cipher.decrypt(await readFile(join(dataDir, 'BeforeUpdate', backups.at(-1), 'inventory.vault'))));
+      assert.ok(inventory.entries.some(entry => entry.name === 'workflows.vault'));
+      assert.ok(inventory.entries.some(entry => entry.name === 'tts.vault'));
+      report.updateBackupIncludesAllVaultStores = true;
+    } finally { dialog.showMessageBox = previousMessageBox; updates.updater.quitAndInstall = previousInstall; }
     await writeFile(join(root, 'verification-update.json'), JSON.stringify(report, null, 2)); return report;
   } finally { globalThis.fetch = previousFetch; dialog.showSaveDialog = previousSaveDialog; }
 }

@@ -1,16 +1,17 @@
 import { githubSource, repositoryUrl, probeUpdateRepository, newerReleases } from './update-source.mjs';
 export class UpdateManager {
-  constructor({ updater, packaged, source, version, beta = false, notify = () => {}, isBusy = () => false, beforeInstall = async () => {}, installAllowed = false }) {
+  constructor({ updater, packaged, source, version, beta = false, notify = () => {}, isBusy = () => false, beforeInstall = async () => {}, installAllowed = false, confirmUnsignedInstall, onInstallFailure = () => {} }) {
+    this.confirmUnsignedInstall = confirmUnsignedInstall; this.onInstallFailure = onInstallFailure;
     this.updater = updater; this.packaged = packaged; this.isBusy = isBusy; this.beforeInstall = beforeInstall; this.notify = notify; this.installAllowed = installAllowed; this.working = false; this.beta = beta === true;
-    this.status = { state: 'disabled', version, message: packaged ? 'GitHub-Updates sind noch nicht eingerichtet.' : 'GitHub-Updates sind in der installierten App verfügbar.', progress: 0, targetVersion: null, beta: this.beta, releases: [], installAllowed };
+    this.status = { state: 'disabled', version, message: packaged ? 'GitHub-Updates sind noch nicht eingerichtet.' : 'GitHub-Updates sind in der installierten App verfügbar.', progress: 0, targetVersion: null, beta: this.beta, releases: [], installAllowed, unsignedInstallAvailable: typeof confirmUnsignedInstall === 'function' };
     updater.logger = null; updater.autoDownload = false; updater.autoInstallOnAppQuit = false;
     updater.allowDowngrade = false; updater.allowPrerelease = this.beta; updater.disableWebInstaller = true;
     updater.on('checking-for-update', () => this.set('checking', 'GitHub wird auf neue Versionen geprüft …'));
     updater.on('update-available', info => { this.status.targetVersion = String(info.version).slice(0, 40); this.set('available', `Version ${this.status.targetVersion} ist verfügbar.`); });
     updater.on('update-not-available', () => this.set('current', 'Du verwendest die aktuelle veröffentlichte Version.'));
     updater.on('download-progress', progress => { this.status.progress = Math.max(0, Math.min(100, Number(progress.percent) || 0)); this.set('downloading', 'Update wird heruntergeladen und geprüft …'); });
-    updater.on('update-downloaded', () => this.set('downloaded', installAllowed ? 'Update bereit. Installation startet erst auf deinen Klick.' : 'Update geladen. Die automatische Installation benötigt eine signierte Veröffentlichung.'));
-    updater.on('error', () => this.set('error', 'Das Update konnte nicht sicher geprüft oder geladen werden. Deine Chats bleiben erhalten.'));
+    updater.on('update-downloaded', () => this.set('downloaded', installAllowed ? 'Update bereit. Installation startet erst auf deinen Klick.' : this.status.unsignedInstallAvailable ? 'Update geladen. Installation ohne Herausgebersignatur nur nach ausdrücklicher Warnungsbestätigung.' : 'Update geladen. Die automatische Installation benötigt eine signierte Veröffentlichung.'));
+    updater.on('error', () => { if (this.status.state === 'installing') this.onInstallFailure(); this.set('error', 'Das Update konnte nicht sicher geprüft, geladen oder gestartet werden. Deine Chats bleiben erhalten.'); });
     if (source?.provider === 'github') this.configure(source);
   }
   configure(source) {
@@ -75,13 +76,29 @@ export class UpdateManager {
     finally { this.working = false; this.notify(); }
   }
   async install() {
-    if (!this.installAllowed) return { ok: false, error: 'Für die automatische Installation fehlt eine signierte Release-Konfiguration. Nutze vorerst die Setup-Datei.' };
+    if (!this.installAllowed && !this.status.unsignedInstallAvailable) return { ok: false, error: 'Für die automatische Installation fehlt eine signierte Release-Konfiguration. Nutze vorerst die Setup-Datei.' };
     if (this.working || this.status.sourceChecking) return { ok: false, error: 'Bitte den laufenden Update-Vorgang abschließen.' };
     if (this.status.state !== 'downloaded') return { ok: false, error: 'Es ist noch kein Update zur Installation bereit.' };
     if (this.isBusy()) return { ok: false, error: 'Bitte erst die laufende Antwort oder Einstellungsänderung abschließen.' };
-    this.set('installing', 'Der verschlüsselte Tresor wird gesichert …');
-    try { await this.beforeInstall(); }
-    catch { this.set('downloaded', 'Die Tresorsicherung ist fehlgeschlagen. Das Update wurde nicht installiert.'); return { ok: false, error: this.status.message }; }
-    this.updater.quitAndInstall(false, true); return { ok: true };
+    const targetVersion = this.status.targetVersion; const repository = this.status.repository;
+    this.working = true; this.notify();
+    try {
+      if (!this.installAllowed) {
+        const confirmed = await this.confirmUnsignedInstall({ targetVersion, repository });
+        if (confirmed !== true) return { ok: true, cancelled: true };
+      }
+      // Consent applies only to this downloaded update, never to future updates.
+      if (this.status.state !== 'downloaded' || this.status.targetVersion !== targetVersion || this.status.repository !== repository || this.isBusy()) return { ok: false, error: 'Der App- oder Updatestatus hat sich geändert. Bitte erneut installieren, sobald alle Vorgänge abgeschlossen sind.' };
+      this.set('installing', 'Der verschlüsselte Tresor wird gesichert …');
+      try { await this.beforeInstall(); }
+      catch { this.onInstallFailure(); this.set('downloaded', 'Die Tresorsicherung ist fehlgeschlagen oder es gibt ungesendete Eingaben. Das Update wurde nicht installiert.'); return { ok: false, error: this.status.message }; }
+      if (this.status.state !== 'installing') { this.onInstallFailure(); return { ok: false, error: this.status.message }; }
+      this.updater.quitAndInstall(false, true);
+      return this.status.state === 'installing' ? { ok: true } : { ok: false, error: this.status.message };
+    } catch {
+      this.onInstallFailure();
+      if (['downloaded', 'installing'].includes(this.status.state)) this.set('downloaded', 'Die Installation konnte nicht bestätigt oder gestartet werden. Das Update wurde nicht installiert.');
+      return { ok: false, error: this.status.message };
+    } finally { this.working = false; this.notify(); }
   }
 }

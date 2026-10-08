@@ -1,5 +1,13 @@
 # Änderungen
 
+## 0.4.2 · Updateinstallation nach Bestätigung
+
+- Unsignierte heruntergeladene Updates lassen sich nach einer nativen Warnung mit Version, Quelle und ausdrücklicher Risikobestätigung installieren. Abbrechen ist die Standardauswahl; Zustimmung gilt nur für einen Versuch.
+- Downloadprüfungen bleiben aktiv; keine automatische Installation beim Beenden und keine Umgehung von Windows-Ausführungssperren.
+- Vor dem Installerstart werden alle verschlüsselten Tresordateien gesichert, einschließlich Workflows, Aufträgen, SSH und TTS. Fehler und laufende Vorgänge verhindern die Installation.
+- 97 Node-Tests, fünf Python-Tests und echter Electron-Fenstertest einschließlich Abbruch, Zustimmung und vollständiger Sicherung.
+- Von 0.4.1 muss das Setup einmal manuell gestartet werden, um die bisherige Sperre zu ersetzen.
+
 ## 0.4.1 · Formeln
 
 - LaTeX-Formeln mit Dollar- und Backslash-Trennzeichen, lokalem KaTeX, Schriftdateien und barrierefreier MathML-Ausgabe.

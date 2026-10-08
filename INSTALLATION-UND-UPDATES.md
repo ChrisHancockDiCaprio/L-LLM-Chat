@@ -1,9 +1,9 @@
 # KAIROS installieren
 
-Aktueller Stand **0.3.0**: siehe [WORKFLOW-PROFILE.md](WORKFLOW-PROFILE.md) und [Releasehinweise](release/notes-0.3.0.md). KAIROS hieß bisher Qwen Chat; App-ID und Tresorpfad bleiben erhalten. Setup-Dateien heißen jetzt `KAIROS-Setup-0.3.0-x64.exe` / `.msi`. Ältere Installations- und Prüfstände unten sind historisch.
+Aktueller Stand **0.4.2**: siehe [Releasehinweise](release/notes-0.4.2.md). KAIROS hieß bisher Qwen Chat; App-ID und Tresorpfad bleiben erhalten. Setup-Dateien heißen `KAIROS-Setup-0.4.2-x64.exe` / `.msi`. Ältere Installations- und Prüfstände unten sind historisch.
 
-1. Eine laufende Qwen-Chat-App schließen, nachdem Antworten und Eingaben abgeschlossen sind.
-2. `Qwen-Chat-Setup-0.2.2-x64.exe` öffnen. Diese Pilotversion ist noch ohne Windows-Herausgeberzertifikat; die Windows-Anwendungssteuerung kann die Ausführung blockieren. Sicherheitsrichtlinien nicht verändern.
+1. Eine laufende KAIROS-/Qwen-Chat-App schließen, nachdem Antworten und Eingaben abgeschlossen sind.
+2. `KAIROS-Setup-0.4.2-x64.exe` öffnen. Für den Wechsel von 0.4.1 ist dieser manuelle Start einmal nötig: die alte App enthält noch die Installationssperre. Diese Pilotversion ist noch ohne Windows-Herausgeberzertifikat; die Windows-Anwendungssteuerung kann die Ausführung blockieren. Sicherheitsrichtlinien nicht verändern.
 3. Programmordner wählen. Die Installation erfolgt für das aktuelle Windows-Konto. Node.js, Electron oder Python müssen auf dem Zielrechner nicht separat installiert werden.
 4. Über Startmenü oder Desktopverknüpfung öffnen. Bestehende Verbindungen und Chats desselben Windows-Kontos werden übernommen. Bei einer frischen Installation Server hinzufügen und Modelle ausdrücklich aktivieren.
 
@@ -29,9 +29,9 @@ Vorgesehene Quelle: https://github.com/ChrisHancockDiCaprio/L-LLM-Chat.
 
 Der Benutzer hat das Repository öffentlich gestellt. Die App benötigt für öffentliche Updates keinen GitHub-Zugang. Unter **Einstellungen → Updates → GitHub-Repository für Updates** kann eine andere Repository-Hauptadresse eingetragen werden. **Prüfen & speichern** prüft öffentliche Erreichbarkeit und veröffentlichte Windows-Assets und übernimmt die Adresse verschlüsselt in `settings.vault`. Fehlgeschlagene Prüfungen behalten die alte Quelle bei. Noch fehlende Releases blockieren das Speichern nicht; Entwürfe zählen nicht als veröffentlichte Updates. Während eines Updatevorgangs bleibt die Quelle gesperrt. Nach einem bereits geladenen Update ist vor dem Quellenwechsel ein App-Neustart erforderlich.
 
-Die installierte App hat einen Updates-Reiter zum Prüfen und ausdrücklichen Herunterladen. SHA-512 und Transportprüfung ersetzen keine Herausgebersignatur. Die automatische Installation ist in der unsignierten Pilotversion fest gesperrt, ebenso automatische Downloads und Installation beim Beenden. Für eine spätere Freigabe werden ein gültiges Windows-Code-Signing-Zertifikat, verifizierte signierte Installer und eine an den erwarteten Herausgeber gebundene Prüfung benötigt. Die vorhandene Sicherungs-/Neustartlogik allein hebt diese Sperre nicht auf.
+Die installierte App hat einen Updates-Reiter zum Prüfen und ausdrücklichen Herunterladen. Ab 0.4.2 öffnet **Installieren & neu starten** bei unsignierten Veröffentlichungen eine native Warnung mit Version und Repository. **Abbrechen** ist die Standardauswahl; nur **Risiko akzeptieren und installieren** erlaubt diesen einen Installationsversuch. Die Zustimmung wird nicht dauerhaft gespeichert. SHA-512 und Transportprüfung bleiben aktiv, bestätigen aber nicht die Identität des Herausgebers. Eine manipulierte Quelle könnte Schadsoftware liefern. Die Signaturprüfung des Updaters wird nicht deaktiviert. Für spätere signierte Veröffentlichungen muss die Konfiguration an den erwarteten Herausgeber gebunden werden. Downloads und Installation beim gewöhnlichen Beenden erfolgen weiterhin nicht automatisch. Windows-Ausführungssperren werden nicht umgangen.
 
-Die Update-Vorbereitung kann verschlüsselte Kopien aller erforderlichen Tresordateien einschließlich Anhängen unter `Vault\BeforeUpdate` erstellen. Eine fehlgeschlagene Sicherung blockiert den vorgesehenen automatischen Neustart. Manuelle Setup-Updates erhalten die vorhandenen Dateien direkt und erzeugen derzeit keine automatische Versionssicherung.
+Vor dem Installationsstart werden verschlüsselte Kopien aller Tresordateien einschließlich Workflows, Aufträgen, SSH-Daten, TTS-Daten und Anhängen unter `Vault\BeforeUpdate` erstellt. Die drei Kerndateien für Verlauf, Einstellungen und Zugänge sind zwingend erforderlich. Eine fehlgeschlagene Sicherung, laufende Vorgänge oder ungesendete Chat-Eingaben blockieren den Neustart. Manuelle Setup-Updates erhalten die vorhandenen Dateien direkt und erzeugen derzeit keine automatische Versionssicherung.
 
 ## Für Entwickler
 

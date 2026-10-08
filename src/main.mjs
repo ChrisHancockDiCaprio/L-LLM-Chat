@@ -165,7 +165,7 @@ else {
   notice = [store.notice, settings.notice].filter(Boolean).join(' ');
   const source = settings.db.updateRepository ? githubSource(settings.db.updateRepository) : JSON.parse(readFileSync(join(root, 'release/update-source.json'), 'utf8'));
   updates = new UpdateManager({ updater: updaterPackage.autoUpdater, packaged: app.isPackaged, source, version: app.getVersion(), beta: settings.db.betaUpdates, notify: publish,
-    isBusy: () => busy || settingsBusy || updating || tts?.busy,
+    isBusy: () => busy || settingsBusy || jobAction || shuttingDown || updating || tts?.busy,
     beforeInstall: async () => {
       updating = true;
       try {
@@ -174,8 +174,17 @@ else {
         await backupVault(dataDir, cipher, app.getVersion());
       } catch (error) { updating = false; throw error; }
     },
-    // The unsigned pilot never installs downloaded executables automatically.
     installAllowed: false,
+    onInstallFailure: () => { updating = false; },
+    confirmUnsignedInstall: async ({ targetVersion, repository }) => {
+      const result = await dialog.showMessageBox(window, {
+        type: 'warning', title: 'KAIROS · Unsigniertes Update',
+        message: 'ACHTUNG: Update ohne verifizierte Herausgebersignatur installieren?',
+        detail: `Version: ${targetVersion ?? 'unbekannt'}\nQuelle: ${repository}\n\nDie Identität des Herausgebers ist nicht durch ein Windows-Zertifikat bestätigt. Eine manipulierte Veröffentlichung könnte Schadsoftware enthalten. Die Download-Prüfsumme ersetzt keine Signatur.\n\nBestätige nur, wenn du dieser Quelle vertraust. Dein verschlüsselter Tresor wird vor dem Start des Installers gesichert. Windows kann die Ausführung weiterhin blockieren. Diese Zustimmung gilt nur für diese Installation.`,
+        buttons: ['Abbrechen', 'Risiko akzeptieren und installieren'], defaultId: 0, cancelId: 0, noLink: true,
+      });
+      return result.response === 1;
+    },
   });
   if (process.argv.includes('--refresh-known-servers')) await refreshServers();
   if (process.argv.includes('--audit-migration')) {

@@ -7,8 +7,9 @@ export async function backupVault(directory, cipher, version) {
   const staging = destination + '.pending';
   await mkdir(staging, { recursive: true });
   const entries = [];
-  const attachments = (await readdir(directory)).filter(name => /^attachment-[a-f0-9-]{36}\.vault$/.test(name));
-  for (const name of ['history.vault', 'settings.vault', 'credentials.vault', ...attachments]) {
+  const required = ['history.vault', 'settings.vault', 'credentials.vault'];
+  const additional = (await readdir(directory, { withFileTypes: true })).filter(entry => entry.isFile() && entry.name.endsWith('.vault') && !required.includes(entry.name)).map(entry => entry.name).sort();
+  for (const name of [...required, ...additional]) {
     const encrypted = await readFile(join(directory, name));
     // All required stores must be readable. A failed backup blocks installation.
     await cipher.decrypt(encrypted);

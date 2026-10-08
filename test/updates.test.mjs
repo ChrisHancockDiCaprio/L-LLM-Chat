@@ -35,13 +35,59 @@ test('update errors do not expose server bodies, tokens or updater error details
   const u = updater(); const manager = new UpdateManager({ updater: u, packaged: true, source, version: '0.2.0' });
   u.emit('error', new Error('PRIVATE-TOKEN')); assert.equal(JSON.stringify(manager.snapshot()).includes('PRIVATE-TOKEN'), false);
 });
+
+test('unsigned update requires fresh explicit consent; cancellation leaves download and vault untouched', async () => {
+  const u = updater(); let approved = false; let prompts = 0; let backups = 0;
+  const manager = new UpdateManager({ updater: u, packaged: true, source, version: '0.4.2',
+    confirmUnsignedInstall: async details => { prompts++; assert.equal(details.targetVersion, '0.4.3'); assert.equal(details.repository, 'https://github.com/ChrisHancockDiCaprio/L-LLM-Chat'); return approved; },
+    beforeInstall: async () => { backups++; } });
+  assert.equal(manager.snapshot().installAllowed, false); assert.equal(manager.snapshot().unsignedInstallAvailable, true);
+  u.emit('update-available', { version: '0.4.3' }); await manager.download();
+  assert.equal(u.installs, 0); assert.match(manager.snapshot().message, /Warnungsbestätigung/);
+  assert.deepEqual(await manager.install(), { ok: true, cancelled: true });
+  assert.equal(manager.snapshot().state, 'downloaded'); assert.equal(backups, 0); assert.equal(u.installs, 0);
+  approved = true; assert.equal((await manager.install()).ok, true);
+  assert.equal(prompts, 2); assert.equal(backups, 1); assert.equal(u.installs, 1);
+  assert.equal((await manager.install()).ok, false); assert.equal(u.installs, 1);
+  assert.equal(u.autoInstallOnAppQuit, false); assert.equal(u.autoDownload, false);
+});
+
+test('consent locks concurrent operations and rechecks activity, errors and target changes', async () => {
+  for (const mutation of ['busy', 'error', 'version']) {
+    const u = updater(); let busy = false; let answer;
+    const manager = new UpdateManager({ updater: u, packaged: true, source, version: '0.4.2', isBusy: () => busy,
+      confirmUnsignedInstall: () => new Promise(resolve => { answer = resolve; }), beforeInstall: () => assert.fail('must not back up') });
+    u.emit('update-available', { version: '0.4.3' }); await manager.download();
+    const installing = manager.install(); assert.equal(manager.snapshot().operationBusy, true);
+    assert.equal((await manager.install()).ok, false); assert.equal((await manager.check()).ok, false);
+    assert.equal((await manager.saveBeta(true, () => assert.fail())).ok, false);
+    if (mutation === 'busy') busy = true;
+    if (mutation === 'error') u.emit('error', new Error('PRIVATE'));
+    if (mutation === 'version') u.emit('update-available', { version: '0.4.4' });
+    answer(true); assert.equal((await installing).ok, false); assert.equal(u.installs, 0); assert.equal(manager.snapshot().operationBusy, false);
+  }
+});
+
+test('dialog and installer failures release the operation lock; emitted errors release application lock', async () => {
+  for (const failure of ['dialog', 'backup', 'throw', 'event']) {
+    const u = updater(); let unlocked = 0;
+    const manager = new UpdateManager({ updater: u, packaged: true, source, version: '0.4.2',
+      confirmUnsignedInstall: async () => { if (failure === 'dialog') throw Error('PRIVATE'); return true; },
+      beforeInstall: async () => { if (failure === 'backup') throw Error('PRIVATE'); }, onInstallFailure: () => { unlocked++; } });
+    u.quitAndInstall = () => { if (failure === 'throw') throw Error('PRIVATE'); if (failure === 'event') u.emit('error', Error('PRIVATE')); };
+    u.emit('update-downloaded'); assert.equal((await manager.install()).ok, false);
+    assert.ok(unlocked); assert.equal(manager.snapshot().operationBusy, false); assert.ok(!JSON.stringify(manager.snapshot()).includes('PRIVATE'));
+  }
+});
 test('backup copies exact ciphertext, encrypts inventory and refuses unreadable vault', async () => {
   const base = fileURLToPath(new URL('../../../work/qwen-chat-update-tests/', import.meta.url));
   await mkdir(base, { recursive: true }); const dir = await mkdtemp(join(base, 'vault-'));
-  for (const name of ['history', 'settings', 'credentials']) await writeFile(join(dir, `${name}.vault`), await testCipher.encrypt('PRIVATE-' + name));
+  const names = ['history', 'settings', 'credentials', 'workflows', 'jobs', 'ssh', 'tts', 'attachment-12345678-1234-1234-1234-123456789abc'];
+  for (const name of names) await writeFile(join(dir, `${name}.vault`), await testCipher.encrypt('PRIVATE-' + name));
+  await writeFile(join(dir, 'ignored.txt'), 'not a vault'); await mkdir(join(dir, 'ignored.vault'));
   const backup = await backupVault(dir, testCipher, '0.2.0');
-  for (const name of ['history', 'settings', 'credentials']) assert.deepEqual(await readFile(join(backup, `${name}.vault`)), await readFile(join(dir, `${name}.vault`)));
-  const inventory = JSON.parse(await testCipher.decrypt(await readFile(join(backup, 'inventory.vault')))); assert.equal(inventory.entries.length, 3);
+  for (const name of names) assert.deepEqual(await readFile(join(backup, `${name}.vault`)), await readFile(join(dir, `${name}.vault`)));
+  const inventory = JSON.parse(await testCipher.decrypt(await readFile(join(backup, 'inventory.vault')))); assert.equal(inventory.entries.length, names.length);
   await writeFile(join(dir, 'history.vault'), 'corrupt'); await assert.rejects(() => backupVault(dir, testCipher, '0.2.0'));
   assert.equal((await readdir(join(dir, 'BeforeUpdate'))).filter(n => !n.endsWith('.pending')).length, 1);
 });

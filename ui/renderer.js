@@ -167,7 +167,7 @@ function renderUpdates() {
   $('#update-progress').hidden = update?.state !== 'downloading';
   $('#update-check').disabled = !update || locked || changed || update.state === 'disabled';
   $('#update-download').disabled = locked || changed || update?.state !== 'available';
-  $('#update-install').disabled = update?.operationBusy || update?.sourceChecking || changed || update?.state !== 'downloaded' || !update.installAllowed || state.busy || state.settingsBusy || Boolean(input.value.trim());
+  $('#update-install').disabled = update?.operationBusy || update?.sourceChecking || changed || update?.state !== 'downloaded' || !(update.installAllowed || update.unsignedInstallAvailable) || state.busy || state.settingsBusy || state.jobAction || state.tts?.busy || Boolean(input.value.trim());
 }
 function updateSend() {
   const busy = Boolean(state?.busy);
