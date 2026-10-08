@@ -1,5 +1,11 @@
 # Änderungen
 
+## 0.4.1 · Formeln
+
+- LaTeX-Formeln mit Dollar- und Backslash-Trennzeichen, lokalem KaTeX, Schriftdateien und barrierefreier MathML-Ausgabe.
+- Formeln vor Markdown-Escaping erkennen; Code und Preise erhalten. Ungültige Formeln bleiben als Text sichtbar. Getrennte Sanitizer-Regeln und begrenzte Makroexpansion; keine externen LaTeX-Inhalte.
+- Formel-, Sicherheits- und Electron-Prüfungen sowie Paketprüfung der mitgelieferten Schriftdateien.
+
 ## 0.4.0 · Sprache und Rich Text
 
 - Qwen3-TTS-Sprachstudio im Chat: CustomVoice, VoiceDesign und Base-Cloning mit modellabhängigen Feldern, Referenz-/Transkriptprüfung und optionalen Sampling-Werten.

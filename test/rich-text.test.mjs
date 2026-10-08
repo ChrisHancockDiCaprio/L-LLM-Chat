@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {JSDOM} from 'jsdom';
 import createDOMPurify from 'dompurify';
-import {marked} from 'marked';
+import * as marked from 'marked';
+import katex from 'katex';
 const script=await readFile(new URL('../ui/rich-text.js',import.meta.url),'utf8');
 function setup() {
   const dom=new JSDOM('<div id="body"></div>',{runScripts:'outside-only',url:'file:///ui/index.html'});
-  dom.window.marked=marked;dom.window.DOMPurify=createDOMPurify(dom.window);
+  dom.window.marked=marked;dom.window.katex=katex;dom.window.DOMPurify=createDOMPurify(dom.window);
   const links=[];dom.window.qwenChat={openLink:href=>links.push(href)};dom.window.eval(script);
   return {window:dom.window,body:dom.window.document.getElementById('body'),links};
 }
@@ -17,6 +18,47 @@ test('headings, lists, tables, fenced code and HTML are rendered without changin
   assert.equal(body.querySelector('h1').textContent,'Titel');assert.equal(body.querySelectorAll('li').length,2);
   assert.equal(body.querySelectorAll('td').length,2);assert.match(body.querySelector('pre code').textContent,/<script>/);
   assert.equal(body.querySelector('strong').textContent,'HTML');assert.equal(body.querySelectorAll('script').length,0);
+});
+test('LaTeX dollars and backslash delimiters render fractions, sums, roots and matrices before Markdown escaping',()=>{
+  const {window,body}=setup();
+  const source=String.raw`Inline $\frac{\pi r^2}{(2r)^2}=\frac{\pi}{4}$ and \(x_1^2\).
+
+$$\frac{22}{7}-\pi=\sum_{n=1}^{\infty}\frac{(4n)!\cdot 8^{4n}}{(3n+1)!(9n)!}$$
+
+\[
+\begin{pmatrix}1 & 2 \\ 3 & \sqrt{4}\end{pmatrix}
+\]`;
+  window.kairosRichText.render(body,source);
+  assert.equal(body.querySelectorAll('.katex').length,4);assert.equal(body.querySelectorAll('.math-display').length,2);
+  assert.equal(body.querySelectorAll('.math-fallback').length,0);assert.ok(body.querySelector('math'));
+  assert.ok(body.querySelector('.math-formula').dataset.latex.includes('\\frac'));
+  const speech=window.kairosRichText.text(body);assert.equal(speech.split('\\frac{\\pi r^2}').length,2);
+});
+test('code, escaped dollars, prices and unmatched delimiters stay literal; table math works',()=>{
+  const {window,body}=setup();
+  window.kairosRichText.render(body,String.raw`Price $5 and $10. Escaped \$x\$. Unmatched $x.
+
+`+'Inline code: `$x^2$`'+String.raw`
+
+~~~tex
+$$\frac{1}{2}$$
+~~~
+
+| Formula |
+|---|
+| $x_1^2$ |`);
+  assert.equal(body.querySelectorAll('.katex').length,1);assert.ok(body.querySelector('td .katex'));
+  assert.equal(body.querySelector('pre code').textContent.trim(),String.raw`$$\frac{1}{2}$$`);
+  assert.match(body.textContent,/Price \$5 and \$10/);
+});
+test('bad formulas and macro loops fall back safely; math cannot load images, link or inject styles/IDs',()=>{
+  const {window,body}=setup();
+  window.kairosRichText.render(body,String.raw`$\frac{1}{$ $\def\loop{\loop}\loop$ $\includegraphics{https://tracker.example/a.png}$ $\href{javascript:alert(1)}{evil}$ $\htmlId{tts-generate}{x}$ $\htmlStyle{position:fixed}{x}$`);
+  assert.ok(body.querySelectorAll('.math-fallback').length>=2);
+  assert.equal(body.querySelectorAll('a,img,script,iframe,[id]').length,0);
+  window.kairosRichText.render(body,'$\\text{<img src=x onerror=alert(1)>}$');assert.equal(body.querySelectorAll('img,script').length,0);
+  window.kairosRichText.render(body,String.raw`$\gdef\poison{123}\poison$ $\poison$`);
+  assert.equal(body.querySelectorAll('.math-fallback').length,1);
 });
 test('XSS, SVG, CSS, images, frames, handlers, clobbering and unsafe links never survive rendering',()=>{
   const {window,body,links}=setup();

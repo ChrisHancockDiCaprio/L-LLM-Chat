@@ -1,6 +1,6 @@
 # KAIROS für Windows
 
-Aktueller Stand **0.4.0**: Qwen-TTS-Sprachstudio und sicher formatierte KI-Antworten. Siehe [Qwen-TTS-Einrichtung und Grenzen](QWEN-TTS.md) und [Releasehinweise](release/notes-0.4.0.md). KAIROS hieß bisher Qwen Chat; App-ID und Tresorpfad bleiben erhalten. Setup-Dateien heißen `KAIROS-Setup-0.4.0-x64.exe` / `.msi`. Ältere Installations- und Prüfstände unten sind historisch.
+Aktueller Stand **0.4.1**: LaTeX-Formeln im Chat, Qwen-TTS-Sprachstudio und sicher formatierte KI-Antworten. Siehe [Qwen-TTS-Einrichtung und Grenzen](QWEN-TTS.md) und [Releasehinweise](release/notes-0.4.1.md). KAIROS hieß bisher Qwen Chat; App-ID und Tresorpfad bleiben erhalten. Setup-Dateien heißen `KAIROS-Setup-0.4.1-x64.exe` / `.msi`. Ältere Installations- und Prüfstände unten sind historisch.
 
 Für die Windows-Installation das Setup öffnen. Details: **INSTALLATION-UND-UPDATES.md**. Im Entwicklungsordner mit **Start-Qwen.cmd** öffnen. Die App verbindet sich mit der ausgewählten Ollama- oder OpenAI-kompatiblen Chat-KI und öffnet ein eigenes Chatfenster mit Historie. Version 0.2.2: variable Updatequelle und natives ComfyUI-Bild-Backend. Einrichtung: **SERVER-UND-COMFYUI.md**.
 
