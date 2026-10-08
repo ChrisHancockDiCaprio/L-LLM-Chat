@@ -102,6 +102,12 @@ export async function verifyUpdate({ root, dataDir, window, store, settings, cre
     const waitingJob=jobs.snapshot().find(j=>j.waiting&&j.serverId==='ui-prompt');
     assert.equal((await run('window.qwenChat.toggleProfile('+JSON.stringify(comfy.id)+',false)')).ok,false);
     assert.equal(await run('document.querySelector(".profile-edit").disabled'),true);report.settingsLockedDuringRequest=true;
+    // TTS configuration and generation remain available while a chat/image request runs.
+    assert.equal((await run('window.qwenChat.ttsConnect({provider:"azure-foundry",baseUrl:"https://parallel-fixture.openai.azure.com",deployment:"tts",model:"tts-1",apiKey:"FAKE-PARALLEL-KEY"})')).ok,true);
+    assert.equal(snapshot().busy,true);
+    await run('window.qwenChat.state().then(state=>window.kairosTts.render(state))');
+    assert.equal(await run('document.querySelector("#tts-fields").disabled'),false);
+    report.ttsAvailableDuringChat=true;
     await run('window.qwenChat.cancel()');await sendPending;assert.equal(jobs.get(waitingJob.id).serverId,'ui-prompt');assert.equal(jobs.get(waitingJob.id).state,'unknown');
     delayComfy=false;const postsBeforeRecovery=promptPosts;
     assert.equal((await run('window.qwenChat.checkJob('+JSON.stringify(waitingJob.id)+')')).ok,true);

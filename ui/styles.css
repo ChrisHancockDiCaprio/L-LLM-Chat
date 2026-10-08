@@ -220,3 +220,14 @@ dialog::backdrop { background: #15271c60; backdrop-filter: blur(3px); }
 .math-display { display: block; max-width: 100%; overflow-x: auto; padding: 4px 0; }
 .message-body .katex-display { margin: 0.7em 0; }
 .math-fallback { font-family: Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+#chat-workspace { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.workspace-tabs { display: flex; gap: 12px; padding: 10px 28px; border-bottom: 1px solid #dfe6d7; }
+.workspace-tabs button { border: 0; border-bottom: 2px solid transparent; padding: 8px 15px; background: transparent; color: #566a5b; }
+.workspace-tabs button.selected { border-color: #4a7154; font-weight: 600; }
+#tts-panel { flex: 1; min-height: 0; max-height: none; margin: 0; padding: 26px 36px; border: 0; border-radius: 0; }
+#tts-settings-panel label { display: block; font-size: 13px; margin: 8px 0; }
+#tts-settings-panel :is(input:not([type=checkbox]),textarea,select) { width: 100%; border: 1px solid #d5decf; border-radius: 7px; padding: 8px; font: inherit; }
+#tts-settings-panel #tts-python { font: 12px Consolas, monospace; white-space: pre; }
+#tts-voice-parameters { margin: 10px 0; }
+#tts-export-path { overflow-wrap: anywhere; }
+@media (max-width: 950px) { .tts-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .settings-tabs { gap: 12px; } }

@@ -23,34 +23,16 @@
     <button id="settings-button" class="settings-button"><span aria-hidden="true">⚙</span> Einstellungen</button>
     <div class="sidebar-bottom"><span class="local-dot"></span><div><strong>Bleibt bei dir.</strong><span>Historie auf diesem Rechner</span></div></div>
   </aside>
-  <main>
+  <main><nav class="workspace-tabs" role="tablist" aria-label="Arbeitsbereich"><button id="chat-tab" role="tab" aria-selected="true" aria-controls="chat-workspace" class="selected" type="button">Chat</button><button id="tts-toggle" role="tab" aria-selected="false" aria-controls="tts-panel" type="button">♪ Sprachstudio</button></nav><div id="chat-workspace" role="tabpanel" aria-labelledby="chat-tab">
     <header class="topbar"><div><span class="eyebrow">DEIN LOKALER CHAT</span><h1 id="chat-title">Neues Gespräch</h1></div><div class="chat-controls">
       <label class="sr-only" for="active-ai">KI für diesen Chat</label><select id="active-ai" aria-label="KI für die nächste Nachricht"></select>
       <button id="delete-chat" class="secondary-button danger-button" type="button">Chat löschen</button>
-      <button id="tts-toggle" class="secondary-button" type="button" aria-expanded="false" aria-controls="tts-panel">♪ Sprache</button>
       <button id="connection-check" class="connection checking" title="Verbindung erneut prüfen"><span class="status-dot"></span><span id="connection-label">Verbindung prüfen …</span><span class="refresh" aria-hidden="true">↻</span></button>
       </div>
     </header>
     <div id="notice" class="notice" role="status" hidden></div>
     <div id="job-list" aria-live="polite"></div>
     <div id="context-note" class="context-note" hidden></div>
-    <section id="tts-panel" hidden aria-label="Qwen TTS">
-      <div class="tts-heading"><strong>Qwen TTS · Sprachstudio</strong><button id="tts-close" type="button" class="icon-button" aria-label="Sprachstudio schließen">×</button></div>
-      <div class="tts-grid"><label>Serverbrücke<input id="tts-url" type="url" placeholder="http://127.0.0.1:8860"></label><label class="checkbox-label"><input id="tts-http" type="checkbox"> HTTP im privaten Netz erlauben</label><button id="tts-connect" type="button" class="secondary-button">Prüfen &amp; speichern</button></div>
-      <p class="settings-hint">Verbindet die KAIROS-Qwen-TTS-Serverbrücke. Erst prüfen, dann sprechen. Text und Referenzaudio gehen beim Erzeugen an diesen Server.</p>
-      <fieldset id="tts-fields" disabled>
-        <div class="tts-grid"><label>Modus<select id="tts-mode"></select></label><label>Sprache<select id="tts-language"></select></label><label id="tts-speaker-label">Stimme<select id="tts-speaker"></select></label></div>
-        <p id="tts-model" class="settings-hint"></p>
-        <label>Sprachtext<textarea id="tts-text" rows="3" maxlength="4000" placeholder="Text eingeben oder eine Chat-Antwort übernehmen …"></textarea></label>
-        <label id="tts-instruct-label">Stimme / Sprechstil beschreiben<textarea id="tts-instruct" rows="2" maxlength="2000" placeholder="Zum Beispiel: warme, tiefe Stimme; ruhig und freundlich sprechen"></textarea></label>
-        <div id="tts-clone-fields" hidden><div class="server-actions"><button id="tts-reference" type="button" class="secondary-button">Referenz-WAV auswählen</button><span id="tts-reference-name"></span><button id="tts-clear-reference" type="button" class="secondary-button">Referenz entfernen</button></div><p class="settings-hint">Eigene oder freigegebene Stimme, sauberer Clip bis 30 Sekunden / 16 MB.</p><label class="checkbox-label"><input id="tts-xvector" type="checkbox"> Nur Stimmprofil verwenden (ohne Transkript)</label><label id="tts-ref-text-label">Genaues Transkript der Referenz<textarea id="tts-ref-text" rows="2" maxlength="4000"></textarea></label></div>
-        <details><summary>Erweiterte Generierungsparameter</summary><label class="checkbox-label"><input id="tts-advanced" type="checkbox"> Eigene Werte verwenden (sonst Modellvorgaben)</label><div class="tts-grid" id="tts-sampling"><label class="checkbox-label"><input id="tts-sample" type="checkbox" checked> Sampling</label><label>Temperatur<input id="tts-temperature" type="number" min="0.01" max="2" step="0.01" value="0.9"></label><label>Top P<input id="tts-top-p" type="number" min="0.01" max="1" step="0.01" value="1"></label><label>Top K<input id="tts-top-k" type="number" min="1" max="1000" value="50"></label><label>Wiederholungsstrafe<input id="tts-repetition" type="number" min="1" max="2" step="0.01" value="1.05"></label><label>Max. Audiotokens<input id="tts-tokens" type="number" min="64" max="4096" value="2048"></label></div></details>
-        <button id="tts-generate" type="button" class="primary-button">Sprache erzeugen</button>
-      </fieldset>
-      <button id="tts-cancel" type="button" class="secondary-button" hidden>Warten beenden</button>
-      <p id="tts-feedback" role="status"></p>
-      <div id="tts-result" hidden><audio id="tts-audio" controls preload="metadata"></audio><div class="server-actions"><button id="tts-export" type="button" class="secondary-button">WAV speichern</button><button id="tts-use-result" type="button" class="secondary-button">Als Referenzstimme verwenden</button></div><p class="settings-hint">Voice Design lässt sich durch eine neue Beschreibung variieren. Als Referenz speichern und im Cloning-Modus weiterverwenden.</p></div>
-    </section>
     <section id="conversation" class="conversation" aria-label="Chatverlauf" aria-live="polite">
       <div id="welcome" class="welcome">
         <div class="welcome-mark">K<span class="spark">✦</span></div>
@@ -79,11 +61,54 @@
       </form>
       <div class="footer-note"><span><span class="model-dot"></span> <span id="model-label">Modell auswählen</span></span><span>Historie verschlüsselt gespeichert</span></div>
     </footer>
+  </div>
+    <section id="tts-panel" hidden role="tabpanel" aria-labelledby="tts-toggle">
+<div class="tts-heading"><div><span class="eyebrow">UNABHÄNGIG VOM CHAT</span><h1>Sprachstudio</h1></div><button id="tts-settings-open" class="secondary-button" type="button">TTS-Einstellungen</button></div>
+<div class="tts-grid"><label>Provider<select id="tts-provider"><option value="qwen">Qwen TTS</option><option value="azure-speech">Azure Speech · SSML</option><option value="azure-foundry">Azure Foundry · OpenAI TTS</option></select></label><button id="tts-reload" type="button" class="secondary-button">Verbindung laden</button></div><p id="tts-connection-status" role="status"></p>
+      <fieldset id="tts-fields" disabled>
+        <div class="tts-grid"><label id="tts-mode-label">Modus<select id="tts-mode"></select></label><label id="tts-language-label">Sprache<select id="tts-language"></select></label><label id="tts-speaker-label">Stimme<select id="tts-speaker"></select></label></div>
+<p id="tts-model" class="settings-hint"></p><label id="tts-model-choice-label">Modell<select id="tts-model-choice"></select></label>
+<div class="tts-grid"><label>Eingabe<select id="tts-input-mode"><option value="text">Text</option><option value="ssml">SSML</option></select></label><button id="tts-import" type="button" class="secondary-button">Text / SSML importieren</button><span id="tts-import-name"></span></div><p id="tts-ssml-hint" class="settings-hint" hidden>SSML wird unverändert gesendet. Stimmen, Sprachen und Parameter werden im XML festgelegt; die Regler unten gelten nur für Text.</p><label>Sprachtext / SSML<textarea id="tts-text" rows="8" maxlength="60000" placeholder="Text oder vollständiges SSML eingeben …"></textarea></label>
+        <label id="tts-instruct-label">Stimme / Sprechstil beschreiben<textarea id="tts-instruct" rows="2" maxlength="2000" placeholder="Zum Beispiel: warme, tiefe Stimme; ruhig und freundlich sprechen"></textarea></label>
+        <div id="tts-clone-fields" hidden><div class="server-actions"><button id="tts-reference" type="button" class="secondary-button">Referenz-WAV auswählen</button><span id="tts-reference-name"></span><button id="tts-clear-reference" type="button" class="secondary-button">Referenz entfernen</button></div><p class="settings-hint">Eigene oder freigegebene Stimme, sauberer Clip bis 30 Sekunden / 16 MB.</p><label class="checkbox-label"><input id="tts-xvector" type="checkbox"> Nur Stimmprofil verwenden (ohne Transkript)</label><label id="tts-ref-text-label">Genaues Transkript der Referenz<textarea id="tts-ref-text" rows="2" maxlength="4000"></textarea></label></div>
+        <details id="tts-qwen-advanced"><summary>Erweiterte Generierungsparameter</summary><label class="checkbox-label"><input id="tts-advanced" type="checkbox"> Eigene Werte verwenden (sonst Modellvorgaben)</label><div class="tts-grid" id="tts-sampling"><label class="checkbox-label"><input id="tts-sample" type="checkbox" checked> Sampling</label><label>Temperatur<input id="tts-temperature" type="number" min="0.01" max="2" step="0.01" value="0.9"></label><label>Top P<input id="tts-top-p" type="number" min="0.01" max="1" step="0.01" value="1"></label><label>Top K<input id="tts-top-k" type="number" min="1" max="1000" value="50"></label><label>Wiederholungsstrafe<input id="tts-repetition" type="number" min="1" max="2" step="0.01" value="1.05"></label><label>Max. Audiotokens<input id="tts-tokens" type="number" min="64" max="4096" value="2048"></label></div></details>
+<div class="tts-grid" id="tts-voice-parameters">
+<label id="tts-speed-label">Geschwindigkeit<input id="tts-speed" type="number" min="0.5" max="2" step="0.05" value="1"></label>
+<label id="tts-pitch-label">Tonhöhe (%)<input id="tts-pitch" type="number" min="-50" max="50" value="0"></label>
+<label id="tts-volume-label">Lautstärke (0–100)<input id="tts-volume" type="number" min="0" max="100" value="100"></label>
+<label id="tts-style-label">Stil<select id="tts-style"></select></label><label id="tts-role-label">Rolle<select id="tts-role"></select></label>
+<label id="tts-styledegree-label">Stilstärke<input id="tts-styledegree" type="number" min="0.01" max="2" step="0.01" value="1"></label>
+<label id="tts-hd-temperature-label">HD-Temperatur<input id="tts-hd-temperature" type="number" min="0" max="1" step="0.01" value="0.7"></label>
+<label id="tts-hd-top-p-label">HD Top P<input id="tts-hd-top-p" type="number" min="0.3" max="1" step="0.01" value="0.7"></label>
+<label id="tts-hd-top-k-label">HD Top K<input id="tts-hd-top-k" type="number" min="1" max="50" value="22"></label>
+<label id="tts-hd-cfg-label">HD CFG<input id="tts-hd-cfg" type="number" min="1" max="2" step="0.1" value="1.4"></label>
+<label id="tts-enhance-label" class="checkbox-label"><input id="tts-enhance" type="checkbox"> Aussprache verbessern</label>
+</div><label>Ausgabeformat<select id="tts-format"></select></label>
+<button id="tts-generate" type="button" class="primary-button">Sprache erzeugen</button>
+      </fieldset>
+      <button id="tts-cancel" type="button" class="secondary-button" hidden>Abbrechen</button>
+      <p id="tts-feedback" role="status"></p>
+      <div id="tts-result" hidden><audio id="tts-audio" controls preload="metadata"></audio><div class="server-actions"><button id="tts-export" type="button" class="secondary-button">Audio exportieren …</button><button id="tts-use-result" type="button" class="secondary-button">Als Referenzstimme verwenden</button></div><p id="tts-reference-hint" class="settings-hint">Voice Design lässt sich durch eine neue Beschreibung variieren. Als Referenz speichern und im Cloning-Modus weiterverwenden.</p></div>
+<p id="tts-export-path" class="settings-hint"></p></section>
   </main>
   <dialog id="settings-dialog" aria-labelledby="settings-title">
     <div class="settings-heading"><div><span class="eyebrow">DEINE KI, DEINE AUSWAHL</span><h2 id="settings-title">Einstellungen</h2><p>Verbinde deine Modelle und entscheide, welche du nutzen möchtest.</p></div><button id="settings-close" class="icon-button" aria-label="Einstellungen schließen">×</button></div>
-    <nav class="settings-tabs" aria-label="Einstellungsbereiche"><button id="tab-local" class="selected" type="button">Server &amp; Modelle</button><button id="tab-security" type="button">Sicherheit</button><button id="tab-litellm" type="button">LiteLLM <span class="concept-badge">Konzept</span></button><button id="tab-updates" type="button">Updates</button></nav>
+    <nav class="settings-tabs" aria-label="Einstellungsbereiche"><button id="tab-local" class="selected" type="button">Server &amp; Modelle</button><button id="tab-tts-settings" type="button">TTS</button><button id="tab-security" type="button">Sicherheit</button><button id="tab-litellm" type="button">LiteLLM <span class="concept-badge">Konzept</span></button><button id="tab-updates" type="button">Updates</button></nav>
     <div id="settings-feedback" class="settings-feedback" role="status" hidden></div>
+<section id="tts-settings-panel" hidden>
+<h3>Sprachstudio · Verbindungen</h3><p class="settings-hint">Eine Verbindung pro Provider. Unabhängig von den Chatmodellen. Azure-Keys liegen verschlüsselt im Windows-Tresor und werden nie im Python-Beispiel angezeigt.</p>
+<div class="tts-grid">
+<label>Provider<select id="tts-settings-provider"><option value="qwen">Qwen TTS</option><option value="azure-speech">Azure Speech</option><option value="azure-foundry">Azure Foundry / OpenAI TTS</option></select></label>
+<label>Endpoint (HTTPS-Ursprung)<input id="tts-url" type="url" placeholder="https://ressource.openai.azure.com"></label>
+<label id="tts-region-label">Region<input id="tts-region" placeholder="westeurope"></label>
+<label id="tts-deployment-label">Deployment-Name<input id="tts-deployment" maxlength="200"></label>
+<label id="tts-family-label">Deployment-Modell<select id="tts-family"><option value="gpt-4o-mini-tts">gpt-4o-mini-tts</option><option value="tts-1">tts-1</option><option value="tts-1-hd">tts-1-hd</option></select></label>
+<label id="tts-api-version-label">API-Version<input id="tts-api-version" value="2025-04-01-preview"></label>
+<label id="tts-key-label">API-Key<input id="tts-key" type="password" autocomplete="new-password" maxlength="4096" placeholder="Leer = gespeicherten Key behalten"></label>
+<label id="tts-http-label" class="checkbox-label"><input id="tts-http" type="checkbox"> HTTP für Qwen im privaten Netz erlauben</label>
+</div><p id="tts-settings-hint" class="settings-hint"></p><button id="tts-connect" type="button" class="primary-button">Prüfen &amp; speichern</button><button id="tts-settings-cancel" type="button" class="secondary-button" hidden>Abbrechen</button><p id="tts-settings-feedback" role="status"></p>
+<h3>Python-Beispiel</h3><p class="settings-hint">Nur als Vorlage zum Kopieren. KAIROS führt keinen Python-Code aus. Der Key kommt ausschließlich aus einer Umgebungsvariable.</p><textarea id="tts-python" rows="12" readonly aria-label="Python-Code-Beispiel"></textarea>
+</section>
     <section id="local-panel">
       <div class="settings-section-heading"><div><h3>Deine Server und Modelle</h3><p>Server prüfen, Modelle entdecken und gezielt aktivieren.</p></div><button id="add-server" class="primary-button">＋ Server</button></div>
       <button id="refresh-servers" class="secondary-button" type="button">Alle Server prüfen</button>

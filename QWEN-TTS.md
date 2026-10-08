@@ -1,8 +1,8 @@
-# Qwen TTS in KAIROS 0.4.0
+# Qwen TTS in KAIROS
 
 ## Bedienung
 
-Im Chat **♪ Sprache** öffnen oder unter einer KI-Antwort **Im Sprachstudio öffnen** wählen. Der Text wird zur Prüfung übernommen; Sprache entsteht erst durch **Sprache erzeugen**. Serveradresse eingeben und **Prüfen & speichern** anklicken. KAIROS zeigt ausschließlich die von der Serverbrücke gemeldeten Modi, Sprachen und Stimmen. Änderungen an der Adresse erfordern eine erneute Prüfung.
+Den eigenen Reiter **♪ Sprachstudio** öffnen oder unter einer KI-Antwort **Im Sprachstudio öffnen** wählen. Der Text wird zur Prüfung übernommen; Sprache entsteht erst durch **Sprache erzeugen**. Unter **Einstellungen → TTS → Qwen TTS** die Serveradresse eingeben und **Prüfen & speichern** anklicken. Danach im Sprachstudio Qwen auswählen und nach einem Neustart die Verbindung laden. KAIROS zeigt ausschließlich die von der Serverbrücke gemeldeten Modi, Sprachen und Stimmen. Änderungen an der Adresse erfordern eine erneute Prüfung. Azure-Anbindungen und SSML sind in [TTS-STUDIO.md](TTS-STUDIO.md) beschrieben.
 
 Audio anhören, als WAV speichern oder **Als Referenzstimme verwenden** wählen. Letzteres übernimmt das erzeugte Audio und sein Transkript zum anschließenden Cloning. **Referenz entfernen** entfernt den gespeicherten Referenzclip. Ein neues Ergebnis ersetzt das letzte Ergebnis. Stimme, Referenztext und Audio bleiben im verschlüsselten `tts.vault`; beim bewussten WAV-Export entsteht eine unverschlüsselte Datei am gewählten Ort. Kein automatisches Vorlesen und keine Änderung des gespeicherten Chattexts oder Modellkontexts.
 

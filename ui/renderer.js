@@ -381,7 +381,7 @@ function editServer(profile) {
   authFields(); $('#server-name').focus(); $('#server-form').scrollIntoView({ block: 'nearest' });
 }
 function settingsTab(tab) {
-  for (const name of ['local', 'security', 'litellm', 'updates']) { $(`#${name}-panel`).hidden = tab !== name; $(`#tab-${name}`).classList.toggle('selected', tab === name); }
+  for (const name of ['local', 'tts-settings', 'security', 'litellm', 'updates']) { $(`#${name}-panel`).hidden = tab !== name; $(`#tab-${name}`).classList.toggle('selected', tab === name); }
   clearServerSecret();
   settingsFeedback('');
   $('#settings-dialog').scrollTop = 0;
@@ -397,6 +397,7 @@ $('#settings-dialog').addEventListener('click', event => {
   backdropPointer = false;
 });
 $('#tab-local').addEventListener('click', () => settingsTab('local'));
+$('#tab-tts-settings').addEventListener('click', () => settingsTab('tts-settings'));
 $('#tab-security').addEventListener('click', () => settingsTab('security'));
 $('#tab-litellm').addEventListener('click', () => settingsTab('litellm'));
 $('#tab-updates').addEventListener('click', () => settingsTab('updates'));

@@ -5,6 +5,8 @@ const files = listPackage(archive).map(x => x.replaceAll('\\','/'));
 assert.ok(files.includes('/src/main.mjs')); assert.ok(files.includes('/assets/icon.png'));
 assert.ok(files.includes('/release/update-source.json'));
 assert.ok(files.includes('/ui/rich-text.js')); assert.ok(files.includes('/ui/tts.js'));
+assert.ok(files.includes('/src/tts-providers.mjs'));
+assert.ok(files.includes('/node_modules/@xmldom/xmldom/lib/dom-parser.js'));
 assert.ok(files.includes('/node_modules/marked/lib/marked.umd.js'));
 assert.ok(files.includes('/node_modules/dompurify/dist/purify.min.js'));
 assert.ok(files.includes('/node_modules/katex/dist/katex.min.js'));

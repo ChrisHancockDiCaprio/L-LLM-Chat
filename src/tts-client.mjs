@@ -15,9 +15,9 @@ export async function boundedBody(response, limit) {
   } finally { await reader.cancel().catch(()=>{}); }
   return Buffer.concat(parts, size);
 }
-export async function ttsCapabilities(profile, { fetchImpl = fetch } = {}) {
+export async function ttsCapabilities(profile, { signal, fetchImpl = fetch } = {}) {
   const response = await fetchImpl(profile.baseUrl + '/v1/tts/capabilities', {
-    headers: secureHeaders(profile), redirect: 'error', signal: AbortSignal.timeout(30000),
+    headers: secureHeaders(profile), redirect: 'error', signal: AbortSignal.any([AbortSignal.timeout(30000), ...(signal ? [signal] : [])]),
   });
   if(!response.ok)throw Error(httpError(response.status));
   const raw = JSON.parse((await boundedBody(response, 65536)).toString('utf8'));

@@ -1,6 +1,6 @@
 # KAIROS für Windows
 
-Aktueller Stand **0.4.2**: Unsignierte Updates nach ausdrücklicher Warnungsbestätigung installieren, LaTeX-Formeln im Chat und Qwen-TTS-Sprachstudio. Siehe [Qwen-TTS-Einrichtung und Grenzen](QWEN-TTS.md) und [Releasehinweise](release/notes-0.4.2.md). KAIROS hieß bisher Qwen Chat; App-ID und Tresorpfad bleiben erhalten. Setup-Dateien heißen `KAIROS-Setup-0.4.2-x64.exe` / `.msi`. Für den Wechsel von 0.4.1 das neue Setup einmal manuell starten, weil die alte Version die Installation noch sperrt. Ältere Installations- und Prüfstände unten sind historisch.
+Aktueller Stand **0.5.0**: Eigenständiges Sprachstudio mit Azure Speech/SSML, Azure Foundry/OpenAI TTS und Qwen Design/Clone. Siehe [TTS-Einrichtung und Grenzen](TTS-STUDIO.md) und [Releasehinweise](release/notes-0.5.0.md). KAIROS hieß bisher Qwen Chat; App-ID und Tresorpfad bleiben erhalten. Setup-Dateien heißen `KAIROS-Setup-0.5.0-x64.exe` / `.msi`. LaTeX und sichere Rich-Text-Ausgabe bleiben enthalten. Ältere Installations- und Prüfstände unten sind historisch.
 
 Für die Windows-Installation das Setup öffnen. Details: **INSTALLATION-UND-UPDATES.md**. Im Entwicklungsordner mit **Start-Qwen.cmd** öffnen. Die App verbindet sich mit der ausgewählten Ollama- oder OpenAI-kompatiblen Chat-KI und öffnet ein eigenes Chatfenster mit Historie. Version 0.2.2: variable Updatequelle und natives ComfyUI-Bild-Backend. Einrichtung: **SERVER-UND-COMFYUI.md**.
 
@@ -68,3 +68,7 @@ Quellen: [Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-
 Bilder mit Vision-Modellen besprechen, Text-/Codedateien anhängen und einen Bildgenerator als eigene Serverart verbinden. Ergebnisse erscheinen direkt im Chat; Anhänge liegen separat verschlüsselt im Tresor. Einrichtung, Grenzen und der offene Ollama-Vision-Serverfehler: **BILDER-UND-DATEIEN.md**.
 
 SSH-Tunnel und Auftragswiederabruf ab 0.3.1: siehe [SSH-UND-AUFTRAEGE.md](SSH-UND-AUFTRAEGE.md).
+
+## Sprachstudio ab 0.5.0
+
+Eigener TTS-Reiter für Azure Speech mit SSML, Azure Foundry/OpenAI TTS und die bestehende Qwen-Brücke. Verbindungen und schlüsselfreie Python-Beispiele unter Einstellungen → TTS. [Einrichtung und Grenzen](TTS-STUDIO.md).

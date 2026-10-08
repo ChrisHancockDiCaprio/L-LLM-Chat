@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.5.0 — 2026-10-08
+
+- Unabhängiger Sprachstudio-Reiter mit Text/SSML, Import, stimmabhängigen Parametern, Vorschau, Export und Abbruch.
+- Getrennte Azure-Speech- und Azure-Foundry-TTS-Adapter; verschlüsselte Keys und nicht ausführbare Python-Beispiele in TTS-Einstellungen.
+- Chat/TTS parallel nutzbar; Qwen-Datenmigration und isolierte Behandlung beschädigter TTS-Tresore.
+- Azure-Adaptertests und echte Electron-Verifikation; siehe TTS-STUDIO.md für Grenzen und Dokumentation.
+
 ## 0.4.2 · Updateinstallation nach Bestätigung
 
 - Unsignierte heruntergeladene Updates lassen sich nach einer nativen Warnung mit Version, Quelle und ausdrücklicher Risikobestätigung installieren. Abbrechen ist die Standardauswahl; Zustimmung gilt nur für einen Versuch.

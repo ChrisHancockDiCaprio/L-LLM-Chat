@@ -30,7 +30,7 @@ Auch \(x_1^2+x_2^2=r^2\) und abgesetzte Formeln funktionieren:
   })()`);
   assert.equal(report.count,6);assert.equal(report.blocks,2);assert.ok(report.fonts&&report.styled&&report.contextUnchanged);
   assert.ok(report.fractions>=3);assert.equal(report.fallbacks,0);
-  await run(`document.querySelector('#tts-close').click();document.querySelector('#image-options').open=false;document.querySelector('.message:last-child').scrollIntoView({block:'start',behavior:'instant'});`);
+  await run(`document.querySelector('#chat-tab').click();document.querySelector('#image-options').open=false;document.querySelector('.message:last-child').scrollIntoView({block:'start',behavior:'instant'});`);
   await new Promise(resolve=>setTimeout(resolve,200));
   const preview=await Promise.race([window.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true}),new Promise(resolve=>setTimeout(()=>resolve(null),5000))]);
   if(preview)await writeFile(join(root,'preview-math.png'),preview.toPNG());

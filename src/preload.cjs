@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('qwenChat', {
   openLink: url => ipcRenderer.invoke('chat:open-link', url),
+  ttsSelect: provider => ipcRenderer.invoke('tts:select', provider),
+  ttsImport: () => ipcRenderer.invoke('tts:import'),
   ttsConnect: config => ipcRenderer.invoke('tts:connect', config),
   ttsReference: () => ipcRenderer.invoke('tts:reference'),
   ttsClearReference: () => ipcRenderer.invoke('tts:clear-reference'),

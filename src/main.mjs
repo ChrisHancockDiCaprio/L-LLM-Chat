@@ -447,7 +447,7 @@ else {
     if(typeof value !== 'string' || value.length > 2048)return {ok:false};
     try {const url=new URL(value);if(!['https:','http:'].includes(url.protocol)||url.username||url.password)return {ok:false};await shell.openExternal(url.href);return {ok:true};}catch{return {ok:false};}
   });
-  tts = await registerTts({register,directory:dataDir,cipher,dialog,window,publish,isLocked:()=>busy||settingsBusy||jobAction||updating||shuttingDown});
+  tts = await registerTts({register,directory:dataDir,cipher,dialog,window,publish,isLocked:()=>updating||shuttingDown});
   await window.loadFile(join(root, 'ui/index.html'));
   if (!verify) await changeSettings(() => refreshServers());
   if (!verifyUpdateOnly) await check();
