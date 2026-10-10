@@ -1,7 +1,7 @@
 /* KAIROS-owned quick access. Reuses the main composer; no independent API calls. */
 (() => {
   const $ = id => document.getElementById('hancock-' + id);
-  let hooks; let current; let opened = false; let wasBusy = false; let lastState = 'idle';
+  let hooks; let current; let opened = false; let revealPending = false; let wasBusy = false; let lastState = 'idle';
   const completed = new Set(); let initialized = false; let lastTtsResult; let latestResult;
   const feedback = text => { $('feedback').textContent = text; };
   const profile = () => current?.settings.profiles.find(p => p.id === current.settings.activeId && p.enabled);
@@ -18,6 +18,7 @@
     if (!next || !hooks) return;
     current = next;
     const preferences = next.settings.hancock ?? { visible:true, paused:false };
+    if (revealPending && preferences.visible) { revealPending = false; open(); }
     $('dock').hidden = !preferences.visible;
     if (!preferences.visible && opened) close(false);
     $('pet').toggleAttribute('paused', preferences.paused);
@@ -73,7 +74,8 @@
     try {
       const result = await hooks.savePreferences({ ...(current.settings.hancock ?? {visible:true,paused:false}), ...update });
       if (!result.ok) feedback(result.error ?? 'Die Einstellung konnte nicht gespeichert werden.');
-    } catch {feedback('Die Einstellung konnte nicht gespeichert werden.');}
+      return result;
+    } catch {feedback('Die Einstellung konnte nicht gespeichert werden.');return {ok:false};}
   }
   globalThis.kairosHancockPanel = {
     render,
@@ -83,8 +85,11 @@
       hooks = callbacks;
       $('pet').addEventListener('hancock-open', () => opened ? close() : open());
       $('show').addEventListener('click', async () => {
-        if (current?.settings.hancock?.visible === false) await save({visible:true});
-        if (current?.settings.hancock?.visible !== false) open();
+        if (current?.settings.hancock?.visible === false) {
+          revealPending = true;
+          const result = await save({visible:true});
+          if (!result.ok) revealPending = false;
+        } else open();
       });
       $('close').addEventListener('click', () => close());
       const changeConversation = async action => {
