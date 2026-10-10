@@ -1,10 +1,14 @@
 # KAIROS für Windows
 
-Aktueller Stand **0.5.0**: Eigenständiges Sprachstudio mit Azure Speech/SSML, Azure Foundry/OpenAI TTS und Qwen Design/Clone. Siehe [TTS-Einrichtung und Grenzen](TTS-STUDIO.md) und [Releasehinweise](release/notes-0.5.0.md). KAIROS hieß bisher Qwen Chat; App-ID und Tresorpfad bleiben erhalten. Setup-Dateien heißen `KAIROS-Setup-0.5.0-x64.exe` / `.msi`. LaTeX und sichere Rich-Text-Ausgabe bleiben enthalten. Ältere Installations- und Prüfstände unten sind historisch.
+**Portable 0.5.1 (10.10.2026):** Vollständige Windows-ZIP entpacken und KAIROS.exe starten. [Portable Bedienung](PORTABLE.md). Der automatische Updater wurde entfernt; Updateprüfung und manuelles Öffnen der Release-Seite bleiben. Die `lazy-val`-Nachweislücke wurde durch Entfernung aus der Laufzeit beseitigt. [Prüfbericht](docs/KAIROS-LAZY-VAL-NACHWEIS-UND-PORTABLE.md). Streaming, KittenTTS und weitere Roadmap-Etappen bleiben offen.
 
-Für die Windows-Installation das Setup öffnen. Details: **INSTALLATION-UND-UPDATES.md**. Im Entwicklungsordner mit **Start-Qwen.cmd** öffnen. Die App verbindet sich mit der ausgewählten Ollama- oder OpenAI-kompatiblen Chat-KI und öffnet ein eigenes Chatfenster mit Historie. Version 0.2.2: variable Updatequelle und natives ComfyUI-Bild-Backend. Einrichtung: **SERVER-UND-COMFYUI.md**.
+Hancock mit Schnellchat, Gesprächsauswahl, Anhängen und Ergebnisnavigation ist enthalten. [Hancock-Bedienung](docs/KAIROS-HANCOCK-PRUEFBERICHT.md). Das Sprachstudio mit Azure Speech/SSML, Azure Foundry/OpenAI TTS und Qwen Design/Clone, LaTeX und sichere Rich-Text-Ausgabe bleiben erhalten. [TTS-Einrichtung und Grenzen](TTS-STUDIO.md). KAIROS hieß bisher Qwen Chat; App-ID und Tresorpfad bleiben erhalten. Ältere Installations- und Prüfstände unten sind historisch.
+
+Die portable ZIP enthält Electron und die benötigten Bibliotheken; Node.js ist zum Start nicht nötig. Im Entwicklungsordner mit **Start-Qwen.cmd** öffnen. Die App verbindet sich mit der ausgewählten Ollama- oder kompatiblen Chat-KI. [Historische Installation und aktueller Wechsel](INSTALLATION-UND-UPDATES.md), [Server und ComfyUI](SERVER-UND-COMFYUI.md).
 
 ## Server und Modelle
+
+Im Entwicklungsstand: **Einstellungen → Server & Modelle → Kostenlose KI-Angebote und Anbieter** enthält Groq und OpenRouter mit offiziellen Links und „Einrichten“. Der API-Pfad wird getrennt von der Serveradresse gespeichert; bestehende kompatible Anschlüsse behalten `/v1`. „Eigenen Zugang prüfen“ liest bei OpenRouter nur die Zugangsauskunft. Groq-Limits stammen aus normalen Antworten oder dem Anbieter-Dashboard. Unbekannte Quoten bleiben unbekannt. Eine kostenlose Nutzung wird dadurch nicht garantiert; der Modus „Nur kostenlos“ ist noch nicht implementiert. Details: [Anbieter-Prüfbericht](docs/KAIROS-ANBIETER-PRUEFBERICHT.md).
 
 1. Links unten **Einstellungen → Server & Modelle → ＋ Server** öffnen.
 2. Namen und Serveradresse eingeben, ohne API-Pfad oder Zugangsdaten in der URL. **Chatserver automatisch erkennen** liest Ollama und zusätzliche OpenAI-kompatible Modelllisten.

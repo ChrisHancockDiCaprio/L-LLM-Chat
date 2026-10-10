@@ -1,4 +1,4 @@
-name: Windows setup
+name: Windows portable
 on:
   workflow_dispatch:
   push:
@@ -19,6 +19,9 @@ jobs:
           package-manager-cache: false
       - run: npm ci
       - run: node node_modules/electron/install.js
+      - name: Match release tag to package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: node -e "if(process.env.GITHUB_REF_NAME !== 'v'+require('./package.json').version) throw new Error('Release tag differs from package version')"
       - run: npm test
       - run: python server/test_bridge.py
       - name: Verify isolated Electron UI with fixture servers
@@ -27,19 +30,22 @@ jobs:
           Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
           npm run verify:update
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - run: npm run verify:hancock
+      - run: npm run verify:providers
+      - run: npm run licenses
       - run: npm run dist
-      - name: Keep Windows update metadata available for every release channel
-        run: node -e "const fs=require('fs'),p=require('./package.json'),s=require('semver');const f=(s.prerelease(p.version)?.[0]||'latest')+'.yml';if(!fs.existsSync('dist-release/latest.yml'))fs.copyFileSync('dist-release/'+f,'dist-release/latest.yml')"
       - run: node scripts/check-package.mjs
-      - run: npm run dist:msi -- --prepackaged dist-release/win-unpacked
+      - name: Validate packaged portable app and write release checksum
+        run: node scripts/verify-portable.mjs
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: qwen-chat-windows
           path: |
-            dist-release/*.exe
-            dist-release/*.blockmap
-            dist-release/latest.yml
-            dist-msi-release/*.msi
+            dist-release/KAIROS-Portable-*-x64.zip
+            dist-release/KAIROS-Portable-*-x64.zip.sha256
+            dist-release/validation-*.json
+            THIRD_PARTY_NOTICES.md
+            PORTABLE.md
             server/qwen_tts_bridge.py
             QWEN-TTS.md
             TTS-STUDIO.md

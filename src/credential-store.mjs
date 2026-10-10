@@ -2,6 +2,7 @@ import{apiDestination}from'./ssh-store.mjs';
 import { randomUUID } from 'node:crypto';
 import { SecureFile } from './secure-file.mjs';
 import { normalizeAuth, normalizeOrigin } from './connection-security.mjs';
+import {endpointScope} from './api-endpoint.mjs';
 
 export class CredentialStore {
   constructor(directory, cipher) { this.storage = new SecureFile(directory, 'credentials', cipher); }
@@ -23,7 +24,7 @@ export class CredentialStore {
     if (!profile.authRef) return { type: 'none' };
     const entry = this.db.entries[profile.authRef];
     if (!entry || entry.origin !== normalizeOrigin(profile.baseUrl)) throw new Error('Der gespeicherte Zugang gehört nicht zu diesem Server.');
-    if(entry.target && entry.target!==apiDestination(profile) || profile.ssh && !entry.target)throw Error('API-Zugang gehört zu einem anderen SSH-/API-Ziel. Bitte neu hinterlegen.');
+    if(entry.target && entry.target!==apiDestination(profile) || (profile.ssh || endpointScope(profile)) && !entry.target)throw Error('API-Zugang gehört zu einem anderen Anbieter-/Pfad-/SSH-Ziel. Bitte neu hinterlegen.');
     return normalizeAuth(entry.auth);
   }
   async remove(id) {

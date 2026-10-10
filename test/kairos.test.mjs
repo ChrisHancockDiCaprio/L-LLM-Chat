@@ -15,7 +15,7 @@ import { testCipher } from './test-cipher.mjs';
 const graph = { '31': { class_type: 'Encode', inputs: { text: 'EXAMPLE-ONLY' } }, '57': { class_type: 'Sampler', inputs: { cfg: 4, seed: 5 } }, '90': { class_type: 'SaveImage', inputs: { images: ['57',0] } } };
 const mapping = { prompt: {nodeId:'31',input:'text'}, cfg: {nodeId:'57',input:'cfg'}, outputNode:'90' };
 const profile = {id:'first-profile',type:'comfyui',baseUrl:'https://comfy.example'};
-async function directory() { const base=fileURLToPath(new URL('../../../work/kairos-tests/',import.meta.url)); await mkdir(base,{recursive:true}); return mkdtemp(join(base,'case-')); }
+async function directory() { const base=fileURLToPath(new URL('../../.test-output/kairos-tests/',import.meta.url)); await mkdir(base,{recursive:true}); return mkdtemp(join(base,'case-')); }
 test('independent workflow profiles on one server, optional CFG, limits and per-job copies', async()=>{
  const dir=await directory();const store=new WorkflowStore(dir,testCipher);await store.load();
  await store.import(profile,'first',graph);await store.configure(profile,mapping,{cfg:4},{cfg:{min:1,max:10,step:0.5}});
@@ -63,15 +63,15 @@ test('chat deletion persists, preserves other chats and removes only unreference
 test('beta selects highest newer version across stable, alpha and custom prerelease labels; hides drafts and older versions',async()=>{
  const u=new EventEmitter();u.setFeedURL=feed=>{u.feed=feed};u.checkForUpdates=async()=>u.emit('update-available',{version:'0.5.0-preview.2'});
  const source={provider:'github',owner:'Owner',repo:'Repo'};const manager=new UpdateManager({updater:u,packaged:true,source,version:'0.3.0'});
- assert.equal((await manager.saveBeta(true,async()=>{})).ok,true);assert.equal(u.allowPrerelease,true);
+ assert.equal((await manager.saveBeta(true,async()=>{})).ok,true);assert.equal(manager.snapshot().beta,true);
  const fetch=globalThis.fetch;globalThis.fetch=async()=>new Response(JSON.stringify([
   {tag_name:'v0.4.0',draft:false,prerelease:false,assets:[{name:'latest.yml'},{name:'KAIROS.exe'}]},
   {tag_name:'v0.5.0-preview.2',draft:false,prerelease:true,assets:[{name:'latest.yml'},{name:'KAIROS.exe'}]},
   {tag_name:'v0.6.0-alpha.1',draft:false,prerelease:true,assets:[]},
   {tag_name:'v9.0.0',draft:true,assets:[]},{tag_name:'v0.2.9',draft:false,assets:[]}
  ]));
- try{assert.equal((await manager.check()).ok,true);assert.ok(u.feed.url.endsWith('/v0.5.0-preview.2/'));assert.equal(manager.snapshot().releases.length,3);
- assert.equal((await manager.saveBeta(false,async()=>{})).ok,true);assert.equal(u.allowPrerelease,false);assert.equal(manager.snapshot().targetVersion,null);
+ try{assert.equal((await manager.check()).ok,true);assert.equal(manager.snapshot().targetVersion,'0.6.0-alpha.1');assert.equal(manager.snapshot().releases.length,3);
+ assert.equal((await manager.saveBeta(false,async()=>{})).ok,true);assert.equal(manager.snapshot().beta,false);assert.equal(manager.snapshot().targetVersion,null);
  await assert.rejects(async()=>{const value=await manager.saveBeta(true,async()=>{throw Error('disk')});assert.ok(value.ok)});
  assert.equal(manager.snapshot().beta,false);
  }finally{globalThis.fetch=fetch}

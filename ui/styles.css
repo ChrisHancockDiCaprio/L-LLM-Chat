@@ -231,3 +231,33 @@ dialog::backdrop { background: #15271c60; backdrop-filter: blur(3px); }
 #tts-voice-parameters { margin: 10px 0; }
 #tts-export-path { overflow-wrap: anywhere; }
 @media (max-width: 950px) { .tts-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .settings-tabs { gap: 12px; } }
+#hancock-show { margin-left:auto; }
+#hancock-dock { position:fixed; right:12px; bottom:12px; z-index:10; display:flex; flex-direction:column; align-items:flex-end; pointer-events:none; }
+#hancock-dock[hidden] { display:none; }
+#hancock-pet { width:72px; pointer-events:auto; transition:width .2s ease; }
+#hancock-dock.expanded #hancock-pet { width:106px; }
+body:has(#hancock-dock:not([hidden])) .compose-area { padding-right:100px; }
+#hancock-card { pointer-events:auto; width:min(380px,calc(100vw - 32px)); max-height:calc(100vh - 145px); overflow:auto; border:1px solid #b7cfc5; border-radius:20px; background:#fbfdf9; box-shadow:0 12px 48px #193d4926; padding:18px; color:#193d49; }
+#hancock-card[hidden] { display:none; }
+.hancock-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.hancock-heading span { font-size:10px; letter-spacing:.1em; }
+.hancock-heading h2 { font-size:22px; margin:4px 0; }
+#hancock-card button { cursor:pointer; font:inherit; font-size:12px; border:1px solid #cbdcd4; background:white; color:#193d49; border-radius:9px; padding:8px 10px; }
+#hancock-card button:disabled { opacity:.5; cursor:default; }
+#hancock-card :is(button,textarea):focus-visible { outline:2px solid #a57728; outline-offset:2px; }
+#hancock-close { font-size:20px !important; }
+#hancock-card p { font-size:12px; overflow-wrap:anywhere; margin:10px 0; }
+#hancock-card label { font-size:12px; }
+#hancock-message { width:100%; resize:vertical; max-height:150px; padding:10px; border:1px solid #b7cfc5; border-radius:10px; font:inherit; font-size:14px; margin:6px 0; }
+#hancock-message:focus-visible { outline:2px solid #a57728 !important; outline-offset:2px; }
+.hancock-actions { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+.hancock-send-row,.hancock-footer { display:flex; gap:6px; justify-content:space-between; margin:8px 0; }
+#hancock-send { background:#193d49 !important; color:white !important; }
+#hancock-jobs button { display:block; width:100%; text-align:left; margin:6px 0; }
+#hancock-card small { font-size:10px; color:#567078; }
+#hancock-conversation { min-width:0; flex:1; border:1px solid #b7cfc5; border-radius:9px; background:white; padding:8px; color:#193d49; }
+.provider-offer {border-top:1px solid #d5decf;padding:14px 0;overflow-wrap:anywhere;}
+.provider-offer small {display:block;font-size:12px;line-height:1.6;}
+#provider-offers summary {cursor:pointer;font-weight:600;}
+#provider-catalog p {font-size:13px;}
+@media(prefers-reduced-motion:reduce) { #hancock-pet { transition:none; } }

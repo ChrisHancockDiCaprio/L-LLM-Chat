@@ -59,7 +59,7 @@ test('ComfyUI cancellation stops polling and HTTP secrets never reach network', 
   await mockFetch(async () => { calls++; }, async () => assert.rejects(() => generateComfyImages('x', { profile: { ...profile, baseUrl: 'http://192.168.0.175:8188', allowHttp: true }, entry, auth: { type: 'bearer', token: 'FAKE' } }), /HTTPS/)); assert.equal(calls, 0);
 });
 test('workflow, mapping and defaults persist encrypted; reimport clears mapping and failed saves preserve it', async () => {
-  const base = fileURLToPath(new URL('../../../work/qwen-chat-update-tests/', import.meta.url)); await mkdir(base, { recursive: true }); const dir = await mkdtemp(join(base, 'comfy-'));
+  const base = fileURLToPath(new URL('../../.test-output/qwen-chat-update-tests/', import.meta.url)); await mkdir(base, { recursive: true }); const dir = await mkdtemp(join(base, 'comfy-'));
   const store = new WorkflowStore(dir, testCipher); await store.load(); await store.import(profile.baseUrl, 'fixture.json', nodes); await store.configure(profile.baseUrl, mapping, options);
   assert.equal((await readFile(store.storage.file)).includes(Buffer.from('ORIGINAL-POSITIVE')), false);
   const restored = new WorkflowStore(dir, testCipher); await restored.load(); assert.equal(restored.summary(profile.baseUrl).ready, true); assert.deepEqual(restored.get(profile.baseUrl).mapping, mapping);

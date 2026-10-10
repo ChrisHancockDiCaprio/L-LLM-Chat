@@ -1,5 +1,6 @@
 import {SecureFile} from './secure-file.mjs';
 import {randomUUID,createHash} from 'node:crypto';
+import {endpointScope} from './api-endpoint.mjs';
 export function validateSSH(raw) {
   if(!raw?.enabled)return null;
   const host=v=>typeof v==='string'&&v.length>0&&v.length<=253&&/^[A-Za-z0-9_.:-]+$/.test(v);
@@ -27,4 +28,4 @@ export class SSHStore {
   trust(config,value){return this.mutate(db=>{const key=JSON.stringify([config.host,config.port]);if(db.hosts[key]&&db.hosts[key]!==value)throw Error('Geänderter SSH-Hostschlüssel. Verbindung blockiert.');db.hosts[key]=value});}
 }
 
-export function apiDestination(p){const c=validateSSH(p.ssh);return c?JSON.stringify(['ssh',c.host,c.port,c.username,c.targetHost,c.targetPort,c.targetTls]):p.baseUrl;}
+export function apiDestination(p){const c=validateSSH(p.ssh);const destination=c?JSON.stringify(['ssh',c.host,c.port,c.username,c.targetHost,c.targetPort,c.targetTls]):p.baseUrl;const scope=endpointScope(p);return scope?JSON.stringify(['api',destination,...scope]):destination;}

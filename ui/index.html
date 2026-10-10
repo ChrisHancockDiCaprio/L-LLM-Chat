@@ -12,6 +12,9 @@
   <script src="../node_modules/katex/dist/katex.min.js" defer></script>
   <script src="rich-text.js" defer></script>
   <script src="tts.js" defer></script>
+  <script src="hancock.js" defer></script>
+  <script src="hancock-panel.js" defer></script>
+  <script src="providers.js" defer></script>
   <script src="renderer.js" defer></script>
 </head>
 <body>
@@ -23,7 +26,7 @@
     <button id="settings-button" class="settings-button"><span aria-hidden="true">⚙</span> Einstellungen</button>
     <div class="sidebar-bottom"><span class="local-dot"></span><div><strong>Bleibt bei dir.</strong><span>Historie auf diesem Rechner</span></div></div>
   </aside>
-  <main><nav class="workspace-tabs" role="tablist" aria-label="Arbeitsbereich"><button id="chat-tab" role="tab" aria-selected="true" aria-controls="chat-workspace" class="selected" type="button">Chat</button><button id="tts-toggle" role="tab" aria-selected="false" aria-controls="tts-panel" type="button">♪ Sprachstudio</button></nav><div id="chat-workspace" role="tabpanel" aria-labelledby="chat-tab">
+  <main><nav class="workspace-tabs" role="tablist" aria-label="Arbeitsbereich"><button id="chat-tab" role="tab" aria-selected="true" aria-controls="chat-workspace" class="selected" type="button">Chat</button><button id="tts-toggle" role="tab" aria-selected="false" aria-controls="tts-panel" type="button">♪ Sprachstudio</button><button id="hancock-show" type="button">Hancock</button></nav><div id="chat-workspace" role="tabpanel" aria-labelledby="chat-tab">
     <header class="topbar"><div><span class="eyebrow">DEIN LOKALER CHAT</span><h1 id="chat-title">Neues Gespräch</h1></div><div class="chat-controls">
       <label class="sr-only" for="active-ai">KI für diesen Chat</label><select id="active-ai" aria-label="KI für die nächste Nachricht"></select>
       <button id="delete-chat" class="secondary-button danger-button" type="button">Chat löschen</button>
@@ -110,6 +113,7 @@
 <h3>Python-Beispiel</h3><p class="settings-hint">Nur als Vorlage zum Kopieren. KAIROS führt keinen Python-Code aus. Der Key kommt ausschließlich aus einer Umgebungsvariable.</p><textarea id="tts-python" rows="12" readonly aria-label="Python-Code-Beispiel"></textarea>
 </section>
     <section id="local-panel">
+      <details class="security-card" id="provider-offers"><summary>Kostenlose KI-Angebote und Anbieter</summary><p>Hier findest du Angebote für eigene Zugänge. KAIROS sammelt keine fremden Schlüssel. Freikontingent, gültiger Zugang und Modellverfügbarkeit sind getrennte Angaben.</p><div id="provider-catalog"></div></details>
       <div class="settings-section-heading"><div><h3>Deine Server und Modelle</h3><p>Server prüfen, Modelle entdecken und gezielt aktivieren.</p></div><button id="add-server" class="primary-button">＋ Server</button></div>
       <button id="refresh-servers" class="secondary-button" type="button">Alle Server prüfen</button>
       <div id="delete-confirm" class="settings-feedback" hidden role="alert"><p id="delete-confirm-text"></p><div class="server-actions"><button id="delete-confirm-cancel" class="secondary-button" type="button">Behalten</button><button id="delete-confirm-yes" class="primary-button danger-button" type="button">Jetzt entfernen</button></div></div>
@@ -118,6 +122,7 @@
         <input id="server-id" type="hidden">
         <label for="server-type">Verbindungsart</label><select id="server-type"><option value="auto">Chatserver automatisch erkennen</option><option value="ollama">Ollama · Chat &amp; Bilder verstehen</option><option value="openai-chat">OpenAI-kompatibler Chatserver / Gateway</option><option value="comfyui">ComfyUI · eigenes Bild-Backend</option><option value="image-api">Bildgenerator · OpenAI-kompatibel / stable-diffusion.cpp</option></select>
         <label for="server-name">Servername</label><input id="server-name" required maxlength="30" placeholder="Zum Beispiel: Mein Server">
+        <div id="server-provider-fields" hidden><label for="server-provider">KI-Anbieter</label><select id="server-provider"><option value="custom">Eigener Anschluss</option><option value="groq">Groq</option><option value="openrouter">OpenRouter</option></select><label for="server-api-path">API-Basispfad</label><input id="server-api-path" maxlength="160" value="/v1" placeholder="/v1"><p class="settings-hint">Der Schlüssel gilt für diesen Anbieter, Ursprung und Pfad. Bei Änderungen bitte den Zugang neu hinterlegen.</p></div>
         <label for="server-url">Serveradresse</label><input id="server-url" type="url" required placeholder="https://mein-server.example">
         <p class="settings-hint">Automatische Erkennung liest die Modelllisten von Ollama und OpenAI-kompatiblen Chatservern. ComfyUI nutzt seine eigene API: Workflow importieren, Eingänge zuordnen und Bilder erzeugen. OpenAI-kompatible Bildserver verwenden eine andere Verbindungsart.</p>
         <label class="checkbox-label"><input id="ssh-enabled" type="checkbox"> API über eigenen SSH-Tunnel verbinden</label>
@@ -132,6 +137,7 @@
         </div>
         <label for="server-auth">Zugang</label><select id="server-auth"><option value="none">Ohne Zugangsdaten</option><option value="bearer">API-Schlüssel (Bearer)</option><option value="basic">Benutzername und Passwort</option></select>
         <div id="server-user-field" hidden><label for="server-user">Benutzername</label><input id="server-user" maxlength="200" autocomplete="off"></div>
+        <label for="server-model-names">Modell-IDs (optional, eine pro Zeile)</label><textarea id="server-model-names" rows="2" maxlength="21000" placeholder="Leer lassen für automatische Auswahl"></textarea><p class="settings-hint">Bis zu 100 Modellplätze. Bei großen Katalogen kannst du hier gezielt Modelle auswählen.</p>
         <div id="server-secret-field" hidden><label id="server-secret-label" for="server-secret">API-Schlüssel</label><input id="server-secret" type="password" maxlength="4096" autocomplete="new-password" spellcheck="false"><p class="settings-hint">Wird verschlüsselt im Windows-Tresor abgelegt. Ein leeres Feld behält einen vorhandenen Zugang für dieselbe Adresse bei.</p></div>
         <label class="checkbox-label"><input id="server-http" type="checkbox"> HTTP ohne Zugangsdaten im Heimnetz ausdrücklich erlauben</label>
         <p class="settings-hint">HTTPS schützt die Übertragung. Die HTTP-Ausnahme ist unverschlüsselt und nur für private IP-Adressen zulässig. Eine VPN-Verbindung wird von der App nicht automatisch geprüft.</p>
@@ -156,6 +162,7 @@
         <label for="profile-type">Verbindungsart</label><select id="profile-type"><option value="ollama">Ollama-Chat</option><option value="openai-chat">OpenAI-kompatibler Chat</option><option value="comfyui">ComfyUI-Bild-Backend</option><option value="image-api">Bildgenerator (OpenAI-kompatibel)</option></select>
         <label for="profile-name">Name</label><input id="profile-name" required maxlength="60" placeholder="Zum Beispiel: Qwen auf Ubuntu">
         <label for="profile-url">Serveradresse</label><div class="url-field"><input id="profile-url" required type="url" placeholder="https://mein-server.example"><button id="probe-server" type="button" class="secondary-button">Modelle laden</button></div>
+        <div id="profile-api-fields" hidden><input id="profile-provider" type="hidden" value="custom"><p id="profile-provider-name"></p><label for="profile-api-path">API-Basispfad</label><input id="profile-api-path" maxlength="160" value="/v1"><p class="settings-hint">Anbieter und Zugang über „Zugang bearbeiten“ ändern.</p></div>
         <label for="profile-model">Modell</label><input id="profile-model" required list="model-options" maxlength="200" placeholder="qwen3.5:4b"><datalist id="model-options"></datalist>
         <p id="probe-feedback" class="probe-feedback" role="status"></p>
         <div class="model-options-grid"><div><label for="profile-temperature">Kreativität (0–2)</label><input id="profile-temperature" type="number" min="0" max="2" step="0.1" value="0.7" required></div><div><label for="profile-context">Kontextfenster (Tokens)</label><input id="profile-context" type="number" min="512" max="32768" step="1" value="8192" required></div><div><label for="profile-output">Antwortlimit (Tokens)</label><input id="profile-output" type="number" min="128" max="8192" step="1" value="2048" required></div></div>
@@ -174,6 +181,7 @@
       <p class="settings-hint">Während der Nutzung braucht die App entschlüsselte Daten im Arbeitsspeicher. Windows-Schutz verhindert keine Zugriffe durch Schadsoftware unter deinem bereits angemeldeten Konto. Bereits vorhandene Klartextkopien auf Datenträgern lassen sich nachträglich nicht garantiert sicher löschen.</p>
     </section>
     <section id="updates-panel" hidden>
+      <button id="open-source-notices" type="button" class="secondary-button">Open Source · Lizenzen und Copyright</button>
       <div class="concept-intro"><img width="52" height="52" src="../assets/sol-icon.svg" alt="SoL"><div><h3>KAIROS <span id="app-version"></span></h3><p>Neue Versionen über GitHub. Deine Gespräche und dein Tresor bleiben erhalten.</p></div></div>
       <form id="update-source-form" class="security-card">
         <label for="update-repository"><strong>GitHub-Repository für Updates</strong></label>
@@ -183,9 +191,9 @@
         <p id="update-source-feedback" role="status"></p><p id="update-source-status" class="settings-hint" role="status"></p>
       </form>
       <label class="checkbox-label"><input id="update-beta" type="checkbox"> Beta: alle neueren veröffentlichten Versionen einschließlich Pre-Releases anzeigen</label><ul id="update-releases"></ul>
-      <div class="security-card"><strong>Deine Version</strong><p id="update-status" role="status"></p><progress id="update-progress" max="100" hidden></progress><div class="update-buttons"><button id="update-check" class="primary-button">Auf Updates prüfen</button><button id="update-download" class="secondary-button" disabled>Herunterladen</button><button id="update-install" class="secondary-button" disabled>Installieren &amp; neu starten</button></div></div>
-      <div class="security-card"><strong>Veröffentlichung &amp; Installation</strong><p>Öffentliche GitHub-Releases werden ohne Zugangsschlüssel geprüft. Release-Entwürfe erscheinen nicht als Updates.</p><p><strong>Achtung: Diese Veröffentlichung hat keine verifizierte Windows-Herausgebersignatur.</strong> Die Download-Prüfsumme bestätigt nicht die Identität des Herausgebers. Installieren &amp; neu starten öffnet deshalb eine Warnung mit ausdrücklicher Bestätigung für dieses Update. Bestätige nur, wenn du der angezeigten Quelle vertraust. Vor der Installation wird der verschlüsselte Tresor gesichert. Windows kann die Ausführung weiterhin blockieren. Es gibt keine Installation beim gewöhnlichen Beenden der App.</p></div>
-      <p class="settings-hint">Programm: frei wählbarer Installationsordner. Daten: Windows-Tresor unter LocalAppData\QwenChat\Vault. Auch eine Deinstallation bewahrt den Tresor. Er ist an dein Windows-Benutzerkonto gebunden; eine Kopie allein ist keine portable Wiederherstellung.</p>
+      <div class="security-card"><strong>Deine Version</strong><p id="update-status" role="status"></p><div class="update-buttons"><button id="update-check" class="primary-button">Auf Updates prüfen</button><button id="update-open-release" class="secondary-button" disabled>Release-Seite öffnen</button></div></div>
+      <div class="security-card"><strong>Portable Ausgabe &amp; manuelle Updates</strong><p>Öffentliche GitHub-Releases werden ohne Zugangsschlüssel geprüft. Entwürfe erscheinen nicht als Updates. KAIROS lädt keine Programmdateien herunter und startet keinen Installer.</p><p>Öffne die Release-Seite, lade die portable Windows-ZIP selbst herunter und entpacke sie vollständig in einen neuen Ordner. Beende KAIROS und starte die neue KAIROS.exe. Deine Gespräche und Verbindungen bleiben im vorhandenen Windows-Tresor.</p></div>
+      <p class="settings-hint">Programm: vollständig entpackter portabler Ordner. Daten: Windows-Tresor unter LocalAppData\QwenChat\Vault. Auch eine Deinstallation bewahrt den Tresor. Er ist an dein Windows-Benutzerkonto gebunden; eine Kopie allein ist keine portable Wiederherstellung.</p>
     </section>
     <section id="litellm-panel" hidden>
       <div class="concept-intro"><span class="concept-icon">⇄</span><div><h3>Ein Gateway für mehrere Modelle</h3><p>Später kannst du lokale Modelle und weitere Anbieter über deine LiteLLM-Verbindung auswählen.</p></div></div>
@@ -196,5 +204,21 @@
   </dialog>
 <dialog id="chat-delete-dialog"><h3>Chat löschen?</h3><p>Dieses Gespräch und seine ungenutzten Anhänge werden aus dem aktiven Tresor entfernt. Bereits angelegte Update-Sicherungen bleiben bestehen.</p><button id="chat-delete-cancel" class="secondary-button">Behalten</button><button id="chat-delete-confirm" class="primary-button danger-button">Chat löschen</button></dialog>
 <dialog id="ssh-trust-dialog"><h3>SSH-Hostschlüssel bestätigen</h3><p id="ssh-trust-host"></p><code id="ssh-trust-fingerprint"></code><p>Vergleiche diesen Fingerprint über einen vertrauenswürdigen Weg mit deinem Server. Erst deine bewusste Bestätigung erlaubt die erste Verbindung. Geänderte Schlüssel werden blockiert.</p><button id="ssh-trust-no" class="secondary-button">Ablehnen</button><button id="ssh-trust-yes" class="primary-button">Fingerprint geprüft · vertrauen</button></dialog>
+<aside id="hancock-dock" aria-label="Hancock – KAIROS-Begleiter">
+  <section id="hancock-card" aria-labelledby="hancock-heading" hidden>
+    <div class="hancock-heading"><div><span>DEIN KAIROS-BEGLEITER</span><h2 id="hancock-heading">Was liegt an?</h2></div><button id="hancock-close" type="button" aria-label="Hancock-Karte schließen">×</button></div>
+    <p id="hancock-status" role="status">Hancock ist bereit.</p>
+    <div class="hancock-actions" aria-label="Aktionen"><button type="button" data-hancock-action="chat">Chatten</button><button type="button" data-hancock-action="image">Bild erstellen</button><button type="button" data-hancock-action="tts">Vorlesen</button><button type="button" data-hancock-action="jobs">Aufgaben</button></div>
+    <p id="hancock-context"></p>
+    <label for="hancock-conversation">Gespräch</label><div class="hancock-send-row"><select id="hancock-conversation" aria-label="Gespräch auswählen"></select><button id="hancock-new" type="button">Neu</button></div>
+    <label for="hancock-message">Deine Nachricht</label><textarea id="hancock-message" rows="3" maxlength="24000" placeholder="Was möchtest du wissen?"></textarea>
+    <div class="hancock-send-row"><button type="button" id="hancock-attach">Datei auswählen</button><button type="button" id="hancock-send">Senden</button></div>
+    <p id="hancock-attachments"></p><p id="hancock-feedback" role="status"></p>
+    <div id="hancock-jobs" hidden></div>
+    <div class="hancock-footer"><button type="button" id="hancock-large">Groß öffnen</button><button type="button" id="hancock-pause" aria-pressed="false">Ruhemodus</button><button type="button" id="hancock-hide">Ausblenden</button></div>
+    <small>Dateien und Texte werden erst beim Senden übertragen.</small>
+  </section>
+  <kairos-hancock id="hancock-pet" state="idle"></kairos-hancock>
+</aside>
 </body>
 </html>

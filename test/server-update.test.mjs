@@ -16,7 +16,7 @@ const json = value => new Response(JSON.stringify(value));
 const graph = { '1': { class_type: 'CLIPTextEncode', inputs: { text: 'PRIVATE-WORKFLOW-PROMPT' } }, '2': { class_type: 'SaveImage', inputs: { images: ['1', 0] } } };
 async function withFetch(mock, action) { const previous = globalThis.fetch; globalThis.fetch = mock; try { return await action(); } finally { globalThis.fetch = previous; } }
 async function stores() {
-  const base = fileURLToPath(new URL('../../../work/qwen-chat-update-tests/', import.meta.url));
+  const base = fileURLToPath(new URL('../../.test-output/qwen-chat-update-tests/', import.meta.url));
   await mkdir(base, { recursive: true }); const directory = await mkdtemp(join(base, 'vault-'));
   const settings = new SettingsStore(directory, testCipher); const credentials = new CredentialStore(directory, testCipher);
   await settings.load(); await credentials.load(); return { directory, settings, credentials };

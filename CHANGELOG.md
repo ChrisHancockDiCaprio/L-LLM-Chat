@@ -1,5 +1,28 @@
 # Änderungen
 
+## 0.5.1 · Portable Ausgabe und manuelle Updates · 2026-10-10
+
+- Portable Windows-x64-ZIP mit gebündelter Laufzeit; kein NSIS-/MSI-Installer.
+- `electron-updater` und `lazy-val` als Laufzeitabhängigkeiten entfernt. Historische Originalnachweise im Entwicklungsarchiv erhalten; 14 aktuelle Pakete mit 16 originalen Nachweisdateien.
+- Eigene GitHub-Release-Prüfung: Entwürfe und ältere Versionen ausblenden, Beta optional, geprüfte Release-Seite im Browser öffnen. Kein Programmdownload, Installerstart oder Neustart durch Updates.
+- Bestehender verschlüsselter Windows-Tresor bleibt am bisherigen Ort; Programmordner lässt sich verschieben. Daten sind weiterhin an das Windows-Konto gebunden.
+- Hancock und erste Anbieteranschlüsse enthalten. 113 Node-Tests sowie isolierter Electron-Ablauf einschließlich Chat, Bilder, TTS und manueller Updates bestanden. Weitere Roadmap-Etappen bleiben offen.
+
+## In Entwicklung – erste Anbieteranschlüsse · 2026-10-10
+
+- Getrennte API-Pfade, sichere Schlüssel-/Auftragsbindung und Groq/OpenRouter-Voreinstellungen; bestehende `/v1`-Profile bleiben verwendbar.
+- Eigener Angebotskatalog mit Prüfdatum und offiziellen Links; OpenRouter-Zugangsauskunft und Groq-Limits aus regulären Antworten.
+- Gezielte Modell-IDs beim Einrichten; große Modellkataloge werden unabhängig von maximal 100 gespeicherten Profilen begrenzt.
+- Gemeldeter Tokenverbrauch und Anbieterbetrag im Verlauf; 429-Wartezeit ohne automatische Wiederholung.
+- Isolierte Anbieter- und Hancock-Fenstertests erfolgreich. Kein Live-Anbietertest, kein neues Setup; Streaming, Kostenregeln und KittenTTS noch offen.
+
+## In Entwicklung – Hancock · 2026-10-10
+
+- Eigene Figur im App-Fenster mit Schnellchat, Gesprächsauswahl, gemeinsamen Anhängen und Ergebnisnavigation.
+- Chat-, Bild-, Sprach- und Auftragszugriff; echte Statusmeldungen, Dateiablage, Tastaturbedienung und verschlüsselte Ruhe-/Sichtbarkeitseinstellungen.
+- Lokale Open-Source-Ansicht, originale Nachweise der vorhandenen Produktionspakete und dokumentierte Lizenztext-Lücke bei lazy-val.
+- 110 Node-Tests und isolierte Electron-Prüfung mit künstlichem Anbieter. Kein neues Setup und keine Veröffentlichung; weitere Roadmap-Etappen offen.
+
 ## 0.5.0 — 2026-10-08
 
 - Unabhängiger Sprachstudio-Reiter mit Text/SSML, Import, stimmabhängigen Parametern, Vorschau, Export und Abbruch.

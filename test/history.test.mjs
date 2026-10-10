@@ -8,7 +8,7 @@ import { SessionStore, selectContext } from '../src/session-store.mjs';
 
 const message = (role, content, state = 'complete') => ({ id: `${role}-${Math.random()}`, role, content, state, createdAt: new Date().toISOString() });
 async function folder(_t) {
-  const base = fileURLToPath(new URL('../../../work/qwen-chat-tests/', import.meta.url));
+  const base = fileURLToPath(new URL('../../.test-output/qwen-chat-tests/', import.meta.url));
   await mkdir(base, { recursive: true });
   return mkdtemp(join(base, 'history-'));
 }

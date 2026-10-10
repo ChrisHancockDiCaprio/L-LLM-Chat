@@ -1,7 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,readFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {fileURLToPath} from 'node:url';
+const tmpdir = () => fileURLToPath(new URL('../../.test-output/', import.meta.url));
 import {join} from 'node:path';
 import {ttsConnection,ttsCapabilities,ttsRequest,synthesize,validateWav,boundedBody} from '../src/tts-client.mjs';
 import {registerTts} from '../src/tts-service.mjs';

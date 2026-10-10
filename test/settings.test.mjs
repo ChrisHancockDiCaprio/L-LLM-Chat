@@ -8,7 +8,7 @@ import { sendChat } from '../src/ollama-client.mjs';
 import { testCipher } from './test-cipher.mjs';
 
 async function store() {
-  const base = fileURLToPath(new URL('../../../work/qwen-chat-settings-tests/', import.meta.url));
+  const base = fileURLToPath(new URL('../../.test-output/qwen-chat-settings-tests/', import.meta.url));
   await mkdir(base, { recursive: true }); const directory = await mkdtemp(join(base, 'settings-'));
   const settings = new SettingsStore(directory, testCipher); await settings.load();
   assert.equal(settings.active, null); assert.equal(settings.db.profiles.length, 0);

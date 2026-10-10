@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('qwenChat', {
   openLink: url => ipcRenderer.invoke('chat:open-link', url),
   ttsSelect: provider => ipcRenderer.invoke('tts:select', provider),
@@ -16,14 +16,23 @@ contextBridge.exposeInMainWorld('qwenChat', {
   trustSSHHost: (id,accept) => ipcRenderer.invoke('ssh:trust',id,accept),
   importSSHKey: config => ipcRenderer.invoke('ssh:key',config),
   state: () => ipcRenderer.invoke('chat:state'),
+  saveHancock: value => ipcRenderer.invoke('settings:hancock', value),
+  showLicenses: () => ipcRenderer.invoke('app:licenses'),
+  checkProviderQuota: id => ipcRenderer.invoke('providers:quota',id),
   checkUpdates: () => ipcRenderer.invoke('updates:check'),
-  downloadUpdate: () => ipcRenderer.invoke('updates:download'),
-  installUpdate: () => ipcRenderer.invoke('updates:install'),
+  openUpdateRelease: () => ipcRenderer.invoke('updates:open-release'),
   saveUpdateRepository: url => ipcRenderer.invoke('updates:source', url),
   check: () => ipcRenderer.invoke('chat:check'),
   send: (text, attachmentIds, imageOptions) => ipcRenderer.invoke('chat:send', text, attachmentIds, imageOptions),
   exportImage: id => ipcRenderer.invoke('attachments:export', id),
   attach: () => ipcRenderer.invoke('attachments:add'),
+  dropAttachment: file => {
+    try {
+      const path = webUtils.getPathForFile(file);
+      if (!path) return Promise.resolve({ok:false,error:'Bitte eine lokale Datei ablegen.'});
+      return ipcRenderer.invoke('attachments:drop', path);
+    } catch { return Promise.resolve({ok:false,error:'Bitte eine lokale Datei ablegen.'}); }
+  },
   removeAttachment: id => ipcRenderer.invoke('attachments:remove', id),
   cancel: () => ipcRenderer.invoke('chat:cancel'),
   deleteChat: id => ipcRenderer.invoke('chat:delete', id),

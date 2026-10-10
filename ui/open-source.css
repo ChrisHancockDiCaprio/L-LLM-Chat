@@ -1,0 +1,4 @@
+body {font:16px/1.6 system-ui,sans-serif;background:#f7faf5;color:#193d49;margin:0;}
+main {max-width:850px;margin:auto;padding:32px;}
+article {border-top:1px solid #cbdcd4;padding:12px 0;overflow-wrap:anywhere;}
+h2 {font-size:20px;} a {color:#315f48;}

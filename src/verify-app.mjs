@@ -128,7 +128,7 @@ export async function verifyApplication({ root, dataDir, window, store, settings
     report.imageRestored = restoredAttachments.get(generatedId).base64 === fixtureBase64;
     await image('preview-images.png');
     await run(`document.querySelector('#settings-button').click(); document.querySelector('#tab-updates').click();`);
-    report.updatesPanel = await run(`!document.querySelector('#updates-panel').hidden && document.querySelector('#app-version').textContent === ${JSON.stringify(snapshot().updates.version)} && document.querySelector('#update-install').disabled`);
+    report.updatesPanel = await run(`!document.querySelector('#updates-panel').hidden && document.querySelector('#app-version').textContent === ${JSON.stringify(snapshot().updates.version)} && !document.querySelector('#update-install') && typeof window.qwenChat.installUpdate === 'undefined'`);
     await image('preview-updates.png');
   } finally { globalThis.fetch = originalFetch; await settings.commit(originalProfiles); publish(); }
   if (![report.realVision || report.visionFixture, report.inlineImage, report.encryptedAttachment, report.imageGenerationFixture, report.imageRestored, report.updatesPanel].every(Boolean)) throw new Error('Attachment/image/update verification failed');

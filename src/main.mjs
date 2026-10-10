@@ -4,15 +4,13 @@ import { TunnelManager } from './tunnel-manager.mjs';
 import { createHash } from 'node:crypto';
 import { app, BrowserWindow, ipcMain, Menu, session, safeStorage, dialog, nativeImage, shell } from 'electron';
 import { registerTts } from './tts-service.mjs';
-import { dirname, join, basename } from 'node:path';
+import { dirname, join, basename, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { writeFile, readFile, stat } from 'node:fs/promises';
-import updaterPackage from 'electron-updater';
 import { dataPaths, APP_ID } from './data-paths.mjs';
 import { UpdateManager } from './update-manager.mjs';
 import { githubSource } from './update-source.mjs';
-import { backupVault } from './update-backup.mjs';
 import { AttachmentStore } from './attachments.mjs';
 import { generateImage } from './image-client.mjs';
 import { randomUUID } from 'node:crypto';
@@ -26,11 +24,19 @@ import { CredentialStore } from './credential-store.mjs';
 import { protectLegacyBackups } from './secure-file.mjs';
 import { normalizeAuth, secureHeaders } from './connection-security.mjs';
 import { verifyApplication } from './verify-app.mjs';
+import {endpointFields,PROVIDERS} from './api-endpoint.mjs';
+import {PROVIDER_CATALOG} from './provider-catalog.mjs';
+import {readProviderQuota} from './provider-status.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const verifyUpdateOnly = process.argv.includes('--verify-update');
-const verify = process.argv.includes('--verify') || verifyUpdateOnly;
+const verifyHancockOnly = process.argv.includes('--verify-hancock');
+const verifyProvidersOnly = process.argv.includes('--verify-providers');
+const verify = process.argv.includes('--verify') || verifyUpdateOnly || verifyHancockOnly || verifyProvidersOnly;
 const releaseTestRoot = process.argv.find(a => a.startsWith('--release-test-root='))?.slice('--release-test-root='.length);
+if (verifyHancockOnly && !releaseTestRoot) throw new Error('Hancock-Prüfung benötigt einen eigenen freigegebenen Testordner. Bitte npm run verify:hancock verwenden.');
+if (verifyProvidersOnly && !releaseTestRoot) throw new Error('Anbieter-Prüfung benötigt einen eigenen freigegebenen Testordner. Bitte npm run verify:providers verwenden.');
+if (verifyUpdateOnly && !releaseTestRoot) throw new Error('Update-Prüfung benötigt einen eigenen freigegebenen Testordner. Bitte npm run verify:update verwenden.');
 if (releaseTestRoot && !existsSync(join(releaseTestRoot, '.qwen-chat-test-root'))) throw new Error('Testordner ist nicht freigegeben.');
 const { dataDir, legacyDirectory, appDataDir } = dataPaths({ root, appData: app.getPath('appData'), verify, verifySuite: verifyUpdateOnly ? 'update' : undefined, releaseTestRoot });
 app.setAppUserModelId(APP_ID);
@@ -47,7 +53,8 @@ else {
   let cipher; let store; let settings; let credentials; let workflows; let updates; let attachments; let closing = false; let updating = false;
   const drafts = new Set();
   const profileHealth = {};
-  const snapshot = () => ({ ...store.db, tts: tts?.snapshot(), jobs: jobs?.snapshot().map(j=>({...j,bindingOK:boundJob(j,settings?.db?.profiles.find(p=>p.id===j.profileId))})), tunnels: tunnels?.snapshot(), activeJobId: activeJob?.id, jobAction, sessions: store.db.sessions.map(s => ({...s, messages: s.messages.map(m => ({...m, attachments: (m.attachmentIds ?? []).map(id => attachments.preview(id)) }))})), settings: settings.snapshot(), workflows: Object.fromEntries(settings.db.profiles.filter(p => p.type === 'comfyui').map(p => [p.id, workflows.summary(p)])), profileHealth, settingsBusy, connection, busy, notice, omittedRounds, imageProgress, updates: updates?.snapshot(), security: { encrypted: true, vaultDirectory: dataDir } });
+  const providerQuota = {};
+  const snapshot = () => ({ ...store.db, providerCatalog: PROVIDER_CATALOG.map(item=>({...item,...PROVIDERS[item.id]})), providerQuota: Object.fromEntries(Object.entries(providerQuota).filter(([id,value]) => value.identity === connectionIdentity(settings.db.profiles.find(p=>p.id===id) ?? {}))), tts: tts?.snapshot(), jobs: jobs?.snapshot().map(j=>({...j,bindingOK:boundJob(j,settings?.db?.profiles.find(p=>p.id===j.profileId))})), tunnels: tunnels?.snapshot(), activeJobId: activeJob?.id, jobAction, sessions: store.db.sessions.map(s => ({...s, messages: s.messages.map(m => ({...m, attachments: (m.attachmentIds ?? []).map(id => attachments.preview(id)) }))})), settings: settings.snapshot(), workflows: Object.fromEntries(settings.db.profiles.filter(p => p.type === 'comfyui').map(p => [p.id, workflows.summary(p)])), profileHealth, settingsBusy, connection, busy, notice, omittedRounds, imageProgress, updates: updates?.snapshot(), security: { encrypted: true, vaultDirectory: dataDir } });
   const publish = () => { if (window && !window.isDestroyed()) window.webContents.send('chat:update', snapshot()); };
   const guard = event => {
     if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Ungültiger Fensteraufruf.');
@@ -80,7 +87,7 @@ else {
   async function check() {
     const profile = settings.active;
     if (!profile) { checkEpoch++; checking = undefined; connection = { state: 'inactive', message: 'Keine KI ausgewählt' }; publish(); return connection; }
-    const key = JSON.stringify([profile.id, profile.baseUrl, profile.model, profile.name]);
+    const key = JSON.stringify([profile.id, apiDestination(profile), profile.model, profile.name]);
     if (checking?.key === key) return checking.promise;
     const epoch = ++checkEpoch;
     connection = { state: 'checking', message: 'Verbindung wird geprüft …' }; publish();
@@ -155,7 +162,7 @@ else {
   validateImageRuntime = validateImage;
   attachments = new AttachmentStore(dataDir, cipher, validateImage);
   await attachments.restore(store.db.sessions.flatMap(s => s.messages));
-  if (releaseTestRoot) {
+  if (releaseTestRoot && !verify) {
     const { releaseSelfTest } = await import('./release-self-test.mjs');
     const report = await releaseSelfTest({ store, settings, credentials, attachments, root, cipher, dataDir, version: app.getVersion(), seed: process.argv.includes('--seed-release-test'), seedAttachments: process.argv.includes('--seed-release-attachments') });
     await writeFile(join(releaseTestRoot, 'report.json'), JSON.stringify(report));
@@ -164,28 +171,7 @@ else {
   await protectLegacyBackups(legacyDirectory, dataDir, cipher);
   notice = [store.notice, settings.notice].filter(Boolean).join(' ');
   const source = settings.db.updateRepository ? githubSource(settings.db.updateRepository) : JSON.parse(readFileSync(join(root, 'release/update-source.json'), 'utf8'));
-  updates = new UpdateManager({ updater: updaterPackage.autoUpdater, packaged: app.isPackaged, source, version: app.getVersion(), beta: settings.db.betaUpdates, notify: publish,
-    isBusy: () => busy || settingsBusy || jobAction || shuttingDown || updating || tts?.busy,
-    beforeInstall: async () => {
-      updating = true;
-      try {
-        if (drafts.size || await window.webContents.executeJavaScript("Boolean(document.querySelector('#message-input').value.trim())")) throw new Error('Ungesendete Nachricht.');
-        await Promise.all([store.storage.queue, settings.storage.queue, credentials.storage.queue, workflows.storage.queue, jobs.queue, sshStore.queue, tts?.queue]);
-        await backupVault(dataDir, cipher, app.getVersion());
-      } catch (error) { updating = false; throw error; }
-    },
-    installAllowed: false,
-    onInstallFailure: () => { updating = false; },
-    confirmUnsignedInstall: async ({ targetVersion, repository }) => {
-      const result = await dialog.showMessageBox(window, {
-        type: 'warning', title: 'KAIROS · Unsigniertes Update',
-        message: 'ACHTUNG: Update ohne verifizierte Herausgebersignatur installieren?',
-        detail: `Version: ${targetVersion ?? 'unbekannt'}\nQuelle: ${repository}\n\nDie Identität des Herausgebers ist nicht durch ein Windows-Zertifikat bestätigt. Eine manipulierte Veröffentlichung könnte Schadsoftware enthalten. Die Download-Prüfsumme ersetzt keine Signatur.\n\nBestätige nur, wenn du dieser Quelle vertraust. Dein verschlüsselter Tresor wird vor dem Start des Installers gesichert. Windows kann die Ausführung weiterhin blockieren. Diese Zustimmung gilt nur für diese Installation.`,
-        buttons: ['Abbrechen', 'Risiko akzeptieren und installieren'], defaultId: 0, cancelId: 0, noLink: true,
-      });
-      return result.response === 1;
-    },
-  });
+  updates = new UpdateManager({source,version:app.getVersion(),beta:settings.db.betaUpdates,notify:publish});
   if (process.argv.includes('--refresh-known-servers')) await refreshServers();
   if (process.argv.includes('--audit-migration')) {
     console.log(JSON.stringify({ vaultDirectory: dataDir, sessions: store.db.sessions.length, messages: store.db.sessions.reduce((n, s) => n + s.messages.length, 0), activeId: settings.db.activeId, profiles: settings.db.profiles.map(p => ({ id: p.id, enabled: p.enabled })) }));
@@ -249,6 +235,42 @@ else {
     }catch(error){return {ok:false,error:error.message}}finally{jobAction=false;publish();}
   });
   register('chat:state', () => snapshot());
+  register('settings:hancock', value => changeSettings(() => settings.setHancock(value)));
+  let noticesWindow;
+  register('app:licenses', async () => {
+    if(noticesWindow && !noticesWindow.isDestroyed()) {noticesWindow.show();noticesWindow.focus();return {ok:true};}
+    noticesWindow = new BrowserWindow({title:'KAIROS – Open Source',parent:window,width:800,height:650,show:!verify,autoHideMenuBar:true,webPreferences:{contextIsolation:true,nodeIntegration:false,sandbox:true}});
+    noticesWindow.webContents.setWindowOpenHandler(()=>({action:'deny'}));
+    noticesWindow.webContents.session.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
+    noticesWindow.webContents.on('will-navigate',(event,url)=>{
+      try {
+        const parsed=new URL(url); const path=relative(root,fileURLToPath(parsed));
+        if(parsed.search || parsed.hash || isAbsolute(path) || path.startsWith('..') || !(path==='ui'+(process.platform==='win32'?'\\':'/')+'open-source.html' || path==='THIRD_PARTY_NOTICES.md' || path.startsWith('licenses'+(process.platform==='win32'?'\\':'/')))) event.preventDefault();
+      } catch {event.preventDefault();}
+    });
+    await noticesWindow.loadFile(join(root,'ui/open-source.html'));
+    window.once('closed',()=>{if(noticesWindow && !noticesWindow.isDestroyed())noticesWindow.close();});
+    return {ok:true};
+  });
+  let attachmentImportBusy = false;
+  async function importDraftFile(path, profileId) {
+    if (attachmentImportBusy || busy || settingsBusy || jobAction || updating) return {ok:false,error:'Bitte den laufenden Vorgang abschließen.'};
+    const profile = settings.active;
+    if (!profile || profile.id !== profileId || profile.type === 'comfyui' || !(profile.uploads.files || profile.uploads.photos)) return {ok:false,error:'Uploads für dieses Modell sind deaktiviert oder die Auswahl hat sich geändert.'};
+    if (drafts.size >= 4) return {ok:false,error:'Bis zu vier Anhänge sind möglich. Bitte zuerst einen entfernen.'};
+    if (typeof path !== 'string' || !path || path.length > 32768 || path.includes('\0')) return {ok:false,error:'Ungültige Datei.'};
+    attachmentImportBusy = true;
+    let attachment;
+    try {
+      attachment = await attachments.importFile(path);
+      if (busy || settingsBusy || updating || settings.active?.id !== profileId || !(attachment.kind === 'image' ? profile.uploads.photos : profile.uploads.files)) throw new Error('Die Datei wurde nicht angehängt. Bitte Auswahl und Upload-Freigabe prüfen.');
+      drafts.add(attachment.id); return {ok:true,attachment};
+    } catch(error) {
+      if (attachment) attachments.items.delete(attachment.id);
+      return {ok:false,error:error.message};
+    } finally {attachmentImportBusy=false;}
+  }
+  register('attachments:drop', path => importDraftFile(path,settings.active?.id));
   register('attachments:add', async () => {
     if (busy || settingsBusy || jobAction || updating) return { ok: false, error: 'Bitte den laufenden Vorgang abschließen.' };
     if (drafts.size >= 20) return { ok: false, error: 'Bitte nicht benötigte Anhänge entfernen.' };
@@ -256,9 +278,7 @@ else {
     if (!profile || profile.type === 'comfyui' || !(profile.uploads.files || profile.uploads.photos)) return { ok: false, error: 'Uploads für dieses Modell sind deaktiviert.' };
     const selected = await dialog.showOpenDialog(window, { title: 'Bild oder Textdatei anhängen', properties: ['openFile'], filters: [{ name: 'Bilder und Textdateien', extensions: ['png','jpg','jpeg','webp','txt','md','csv','json','py','js','ts','log','html','css','xml','yaml','yml','toml','sql','ps1'] }] });
     if (selected.canceled) return { ok: true, cancelled: true };
-    try { const attachment = await attachments.importFile(selected.filePaths[0]); if (!(attachment.kind === 'image' ? profile.uploads.photos : profile.uploads.files)) { attachments.items.delete(attachment.id); throw new Error('Diese Upload-Art ist für das Modell deaktiviert.'); }
-      drafts.add(attachment.id); return { ok: true, attachment }; }
-    catch (error) { return { ok: false, error: error.message }; }
+    return importDraftFile(selected.filePaths[0], profile.id);
   });
   register('attachments:remove', id => { if (busy || updating) return { ok: false, error: 'Bitte die laufende Anfrage abschließen.' }; if (drafts.delete(id)) attachments.items.delete(id); return { ok: true }; });
   register('attachments:export', async id => {
@@ -273,8 +293,7 @@ else {
   });
   register('updates:beta', value => changeSettings(() => updates.saveBeta(value, enabled => settings.setBetaUpdates(enabled))));
   register('updates:check', () => updates.check());
-  register('updates:download', () => updates.download());
-  register('updates:install', () => updates.install());
+  register('updates:open-release', async () => {try {await shell.openExternal(updates.releasePage());return {ok:true};}catch{return {ok:false,error:'Release-Seite konnte nicht geöffnet werden. Bitte erneut auf Updates prüfen.'};}});
   register('updates:source', value => changeSettings(async () => {
     const result = await updates.saveRepository(value, url => settings.setUpdateRepository(url));
     if (!result.ok) throw new Error(result.error);
@@ -315,8 +334,9 @@ else {
     const existing = settings.db.profiles.find(p => p.id === profile?.id);
     const candidate = { ...existing, ...profile };
     if (candidate.type === 'comfyui' && candidate.enabled && !workflows.summary(candidate)?.ready) throw new Error('Bitte zuerst den API-Workflow importieren und seine Eingänge zuordnen.');
-    const auth = existing && normalizeOrigin(candidate.baseUrl) === existing.baseUrl ? credentials.get(existing) : { type: 'none' };
-    const checkedCandidate={...candidate,id:candidate.id??"new"};
+    const canReuse=existing && apiDestination({...candidate,baseUrl:normalizeOrigin(candidate.baseUrl)})===apiDestination(existing);
+    const auth = canReuse ? credentials.get(existing) : { type: 'none' };
+    const checkedCandidate={...candidate,id:candidate.id??"new",authRef:canReuse?existing.authRef:null};
     if(candidate.enabled)await proveOnline(checkedCandidate);
     secureHeaders(await wireProfile(checkedCandidate), auth); await settings.upsert(profile);
   }));
@@ -327,10 +347,17 @@ else {
     return settings.toggle(id, enabled);
   }));
   register('settings:select', id => changeSettings(async () => {const p=settings.db.profiles.find(p=>p.id===id);if(!p)throw Error('Verbindung nicht gefunden.');await proveOnline(p);return settings.select(id)}));
+  register('providers:quota', id => changeSettings(async () => {
+    const profile=settings.db.profiles.find(p=>p.id===id);
+    if(!profile || profile.type!=='openai-chat') throw Error('Bitte einen Chat-Anschluss auswählen.');
+    try {providerQuota[id]={...(await readProviderQuota(profile,credentials.get(profile))),identity:connectionIdentity(profile)};}
+    catch(error) {providerQuota[id]={state:'error',message:error instanceof TypeError?'Anbieter nicht erreichbar. Verbindung prüfen.':error.message,checkedAt:Date.now(),identity:connectionIdentity(profile)};throw Error(providerQuota[id].message);}
+    return {quota:providerQuota[id]};
+  }));
   register('settings:probe', async request => {
     if(busy||settingsBusy||jobAction)return {ok:false,error:'Einstellungen sind während des laufenden Auftrags gesperrt.'};
     try {
-      const profile = request?.id ? settings.db.profiles.find(p => p.id === request.id) : { type: request?.type ?? 'ollama', baseUrl: normalizeOrigin(request?.baseUrl), allowHttp: request?.allowHttp === true };
+      const profile = request?.id ? settings.db.profiles.find(p => p.id === request.id) : { type: request?.type ?? 'ollama', baseUrl: normalizeOrigin(request?.baseUrl), allowHttp: request?.allowHttp === true, ...endpointFields(request??{}) };
       if (!profile) throw new Error('Verbindung nicht gefunden.');
       const wire=await wireProfile(profile);
       const models=await discoverModels(wire.baseUrl, { profile:wire, auth: request?.id ? credentials.get(profile) : normalizeAuth(request?.auth) });
@@ -341,7 +368,7 @@ else {
   });
   register('settings:server', raw => changeSettings(async () => {
     if (!raw || typeof raw.name !== 'string' || !raw.name.trim() || raw.name.length > 30) throw new Error('Bitte einen Servernamen mit maximal 30 Zeichen eingeben.');
-    const profile = { ssh: validateSSH(raw.ssh), type: raw.type ?? 'auto', baseUrl: normalizeOrigin(raw.baseUrl), allowHttp: raw.allowHttp === true };
+    const profile = { ssh: validateSSH(raw.ssh), type: raw.type ?? 'auto', baseUrl: normalizeOrigin(raw.baseUrl), allowHttp: raw.allowHttp === true, ...endpointFields({...raw,type:raw.type??'auto'}) };
     const existing = raw.id ? settings.db.profiles.find(p => p.id === raw.id) : null;
     if (raw.useStoredAuth && (!existing || existing.baseUrl !== profile.baseUrl || existing.authType !== raw.auth?.type || apiDestination(existing)!==apiDestination(profile))) throw new Error('Für eine neue Adresse oder Zugangsart bitte neue Zugangsdaten eingeben.');
     if(profile.ssh){
@@ -351,12 +378,22 @@ else {
     const auth = raw.useStoredAuth ? credentials.get(existing) : normalizeAuth(raw.auth); const wire=await wireProfile(profile);secureHeaders(wire, auth);
     const models = await inspectServer(wire, auth);
     if (!models.length) throw new Error('Server erreichbar, aber es sind noch keine Modelle installiert.');
+    let selectedModels=models;
+    if(raw.modelNames!==undefined){
+      if(!Array.isArray(raw.modelNames)||!raw.modelNames.length||raw.modelNames.length>100||new Set(raw.modelNames).size!==raw.modelNames.length||raw.modelNames.some(n=>typeof n!=='string'||!n||n.length>200||/[\s\x00-\x1f]/.test(n)))throw Error('Bitte bis zu 100 unterschiedliche Modell-IDs angeben.');
+      if(raw.modelNames.some(n=>!models.some(m=>m.name===n)))throw Error('Eine ausgewählte Modell-ID wurde vom Anbieter nicht angeboten.');
+      selectedModels=models.filter(m=>raw.modelNames.includes(m.name));
+    }
+    const existingNames=new Set(settings.db.profiles.filter(p=>apiDestination(p)===apiDestination(profile)).map(p=>p.model));
+    if(settings.db.profiles.length>=100&&!selectedModels.some(m=>existingNames.has(m.name)))throw Error('Die 100 Modellplätze sind belegt. Bitte zuerst ungenutzte Modelle entfernen.');
     const ref = await credentials.add(profile.baseUrl, auth, apiDestination(profile));
     const oldRefs = new Set(settings.db.profiles.filter(p => apiDestination(p) === apiDestination(profile)).map(p => p.authRef).filter(Boolean));
-    try { await settings.importServer({ ...profile, name: raw.name, models, authRef: ref, authType: auth.type, restoreRemoved: true }); }
+    try { await settings.importServer({ ...profile, name: raw.name, models:selectedModels, authRef: ref, authType: auth.type, restoreRemoved: true }); }
     catch (error) { await credentials.remove(ref); throw error; }
-    for(const p of settings.db.profiles.filter(p=>p.baseUrl===profile.baseUrl && (!profile.ssh||JSON.stringify(p.ssh)===JSON.stringify(profile.ssh))))profileHealth[p.id]={state:'online',message:'SSH/Tunnel und API geprüft',identity:connectionIdentity(p),checkedAt:Date.now()};
+    for(const p of settings.db.profiles.filter(p=>apiDestination(p)===apiDestination(profile)))profileHealth[p.id]={state:'online',message:'API-Anschluss und Modelle geprüft',identity:connectionIdentity(p),checkedAt:Date.now()};
     for (const id of oldRefs) if (!settings.db.profiles.some(p => p.authRef === id)) await credentials.remove(id);
+    if(!settings.db.profiles.some(p=>p.authRef===ref))await credentials.remove(ref);
+    return {notice:models.length>100?'Modelle importiert und zunächst deaktiviert. Maximal 100 Modellplätze; über Modell-IDs kannst du gezielt auswählen.':'Modelle importiert und zunächst deaktiviert. Bitte das gewünschte Modell aktivieren.'};
   }));
   register('chat:new', async () => {
     if (busy) return { ok: false, error: 'Bitte warte auf die Antwort oder brich die Anfrage ab.' };
@@ -415,7 +452,7 @@ else {
       attachmentIds.forEach(id => drafts.delete(id));
       await store.save();
       job=await jobs.create(profile,active.id,message.id); activeJob=job; message.jobId=job.id; await store.save(); publish();
-      let reply; let generatedIds;
+      let reply; let generatedIds; let replyMetadata;
       if (profile.type === 'comfyui') {
         const result = await generateComfyImages(text, { signal: controller.signal, profile:wire, auth: credentials.get(profile), clientId:job.clientId, onSlow,
           onAccepted: async accepted=>{job=await jobs.update(job.id,{...accepted,state:"queued",recoverable:true});activeJob=job;publish()}, entry: workflows.get(profile), options: imageOptions,
@@ -424,9 +461,12 @@ else {
       } else if (profile.type === 'image-api') {
         const image = await generateImage(text, { signal: controller.signal, profile:wire, auth: credentials.get(profile), onSlow, references: attachmentIds.map(id => attachments.get(id)) });
         validateImage(image); attachments.items.set(image.id, image); await attachments.persist([image.id]); generatedIds = [image.id]; reply = 'Hier ist dein Bild.';
-      } else reply = await (profile.type === 'openai-chat' ? sendOpenaiChat : sendChat)(context.messages, { signal: controller.signal, profile:wire, auth: credentials.get(profile), onSlow });
+      } else reply = await (profile.type === 'openai-chat' ? sendOpenaiChat : sendChat)(context.messages, { signal: controller.signal, profile:wire, auth: credentials.get(profile), onSlow,
+        onMetadata:value=>{replyMetadata=value;},
+        onHeaders:value=>{if(profile.provider==='groq'&&(value.requestsRemaining!=null||value.tokensRemaining!=null||value.retryAfterSeconds!=null)){providerQuota[profile.id]={...value,state:'headers',identity:connectionIdentity(profile),message:'Limits aus einer regulären Anfrage. Eine Auskunft über deinen Tarif ist damit nicht verbunden.'};publish();}}
+      });
       imageProgress = null; message.state = 'complete';
-      active.messages.push({ id: job.id, jobId:job.id, role: 'assistant', content: reply, model: profile.model, providerName: profile.name, state: 'complete', createdAt: new Date().toISOString(), ...(generatedIds ? { attachmentIds: generatedIds } : {}) });
+      active.messages.push({ id: job.id, jobId:job.id, role: 'assistant', content: reply, model: profile.model, providerName: profile.name, state: 'complete', createdAt: new Date().toISOString(), ...replyMetadata, ...(generatedIds ? { attachmentIds: generatedIds } : {}) });
       try { await store.save(); } catch { throw Error('Die Antwort ist da, aber der Verlauf konnte nicht gespeichert werden. Bitte KAIROS geöffnet lassen.'); }
       await jobs.update(job.id,{state:'completed',waiting:false,detail:'Antwort im Gespräch gespeichert.'});
       connection = { state: 'online', message: `Mit ${profile.name} verbunden` };
@@ -450,11 +490,11 @@ else {
   tts = await registerTts({register,directory:dataDir,cipher,dialog,window,publish,isLocked:()=>updating||shuttingDown});
   await window.loadFile(join(root, 'ui/index.html'));
   if (!verify) await changeSettings(() => refreshServers());
-  if (!verifyUpdateOnly) await check();
+  if (!verifyUpdateOnly && !verifyHancockOnly && !verifyProvidersOnly) await check();
   if ((process.argv.includes('--show-settings') || process.argv.includes('--show-security')) && !verify) await window.webContents.executeJavaScript(`document.querySelector('#settings-button').click(); ${process.argv.includes('--show-security') ? "document.querySelector('#tab-security').click();" : ''}`);
   if (verify) {
     try {
-      const verifier = verifyUpdateOnly ? (await import('./verify-update.mjs')).verifyUpdate : verifyApplication;
+      const verifier = verifyProvidersOnly ? (await import('./verify-providers.mjs')).verifyProviders : verifyHancockOnly ? (await import('./verify-hancock.mjs')).verifyHancock : verifyUpdateOnly ? (await import('./verify-update.mjs')).verifyUpdate : verifyApplication;
       const report = await verifier({ root, dataDir, window, store, settings, cipher, credentials, workflows, attachments, drafts, updates, jobs, publish, snapshot });
       console.log(JSON.stringify(report));
       app.quit();

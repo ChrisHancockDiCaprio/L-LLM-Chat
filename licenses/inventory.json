@@ -1,0 +1,161 @@
+{
+  "generated": "2026-10-10",
+  "records": [
+    {
+      "name": "@types/trusted-types",
+      "version": "2.0.7",
+      "packagePath": "node_modules/@types/trusted-types",
+      "license": "MIT",
+      "repository": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+      "missingLicense": false,
+      "files": [
+        "licenses/node_modules__@types__trusted-types/LICENSE"
+      ]
+    },
+    {
+      "name": "@xmldom/xmldom",
+      "version": "0.9.12",
+      "packagePath": "node_modules/@xmldom/xmldom",
+      "license": "MIT",
+      "repository": "git://github.com/xmldom/xmldom.git",
+      "missingLicense": false,
+      "files": [
+        "licenses/node_modules__@xmldom__xmldom/LICENSE"
+      ]
+    },
+    {
+      "name": "asn1",
+      "version": "0.2.6",
+      "packagePath": "node_modules/asn1",
+      "license": "MIT",
+      "repository": "https://github.com/joyent/node-asn1.git",
+      "missingLicense": false,
+      "files": [
+        "licenses/node_modules__asn1/LICENSE"
+      ]
+    },
+    {
+      "name": "bcrypt-pbkdf",
+      "version": "1.0.2",
+      "packagePath": "node_modules/bcrypt-pbkdf",
+      "license": "BSD-3-Clause",
+      "repository": "git://github.com/joyent/node-bcrypt-pbkdf.git",
+      "missingLicense": false,
+      "files": [
+        "licenses/node_modules__bcrypt-pbkdf/LICENSE"
+      ]
+    },
+    {
+      "name": "commander",
+      "version": "15.0.0",
+      "packagePath": "node_modules/katex/node_modules/commander",
+      "license": "MIT",
+      "repository": "git+https://github.com/tj/commander.js.git",
+      "missingLicense": false,
+      "files": [
+        "licenses/node_modules__katex__node_modules__commander/LICENSE"
+      ]
+    },
+    {
+      "name": "dompurify",
+      "version": "3.4.16",
+      "packagePath": "node_modules/dompurify",
+      "license": "(MPL-2.0 OR Apache-2.0)",
+      "repository": "git://github.com/cure53/DOMPurify.git",
+      "missingLicense": false,
+      "files": [
+        "licenses/node_modules__dompurify/LICENSE",
+        "licenses/node_modules__dompurify/LICENSE-MPL"
+      ]
+    },
+    {
+      "name": "katex",
+      "version": "0.19.0",
+      "packagePath": "node_modules/katex",
+      "license": "MIT",
+      "repository": "https://github.com/KaTeX/KaTeX.git",
+      "missingLicense": false,
+      "files": [
+        "licenses/node_modules__katex/LICENSE"
+      ]
+    },
+    {
+      "name": "marked",
+      "version": "18.1.0",
+      "packagePath": "node_modules/marked",
+      "license": "MIT",
+      "repository": "git+https://github.com/markedjs/marked.git",
+      "missingLicense": false,
+      "files": [
+        "licenses/node_modules__marked/LICENSE"
+      ]
+    },
+    {
+      "name": "nan",
+      "version": "2.29.0",
+      "packagePath": "node_modules/nan",
+      "license": "MIT",
+      "repository": "git://github.com/nodejs/nan.git",
+      "missingLicense": false,
+      "files": [
+        "licenses/node_modules__nan/LICENSE.md"
+      ]
+    },
+    {
+      "name": "safer-buffer",
+      "version": "2.1.2",
+      "packagePath": "node_modules/safer-buffer",
+      "license": "MIT",
+      "repository": "git+https://github.com/ChALkeR/safer-buffer.git",
+      "missingLicense": false,
+      "files": [
+        "licenses/node_modules__safer-buffer/LICENSE"
+      ]
+    },
+    {
+      "name": "semver",
+      "version": "7.8.5",
+      "packagePath": "node_modules/semver",
+      "license": "ISC",
+      "repository": "git+https://github.com/npm/node-semver.git",
+      "missingLicense": false,
+      "files": [
+        "licenses/node_modules__semver/LICENSE"
+      ]
+    },
+    {
+      "name": "ssh2",
+      "version": "1.17.0",
+      "packagePath": "node_modules/ssh2",
+      "license": "See original notice",
+      "repository": "http://github.com/mscdex/ssh2.git",
+      "missingLicense": false,
+      "files": [
+        "licenses/node_modules__ssh2/LICENSE"
+      ]
+    },
+    {
+      "name": "tweetnacl",
+      "version": "0.14.5",
+      "packagePath": "node_modules/tweetnacl",
+      "license": "Unlicense",
+      "repository": "https://github.com/dchest/tweetnacl-js.git",
+      "missingLicense": false,
+      "files": [
+        "licenses/node_modules__tweetnacl/AUTHORS.md",
+        "licenses/node_modules__tweetnacl/LICENSE"
+      ]
+    },
+    {
+      "name": "undici",
+      "version": "7.30.0",
+      "packagePath": "node_modules/undici",
+      "license": "MIT",
+      "repository": "git+https://github.com/nodejs/undici.git",
+      "missingLicense": false,
+      "files": [
+        "licenses/node_modules__undici/LICENSE"
+      ]
+    }
+  ]
+}

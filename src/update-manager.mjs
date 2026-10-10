@@ -1,104 +1,53 @@
-import { githubSource, repositoryUrl, probeUpdateRepository, newerReleases } from './update-source.mjs';
+import {githubSource,repositoryUrl,probeUpdateRepository,newerReleases} from './update-source.mjs';
+// Release metadata only. No program download, execution or installation.
 export class UpdateManager {
-  constructor({ updater, packaged, source, version, beta = false, notify = () => {}, isBusy = () => false, beforeInstall = async () => {}, installAllowed = false, confirmUnsignedInstall, onInstallFailure = () => {} }) {
-    this.confirmUnsignedInstall = confirmUnsignedInstall; this.onInstallFailure = onInstallFailure;
-    this.updater = updater; this.packaged = packaged; this.isBusy = isBusy; this.beforeInstall = beforeInstall; this.notify = notify; this.installAllowed = installAllowed; this.working = false; this.beta = beta === true;
-    this.status = { state: 'disabled', version, message: packaged ? 'GitHub-Updates sind noch nicht eingerichtet.' : 'GitHub-Updates sind in der installierten App verfügbar.', progress: 0, targetVersion: null, beta: this.beta, releases: [], installAllowed, unsignedInstallAvailable: typeof confirmUnsignedInstall === 'function' };
-    updater.logger = null; updater.autoDownload = false; updater.autoInstallOnAppQuit = false;
-    updater.allowDowngrade = false; updater.allowPrerelease = this.beta; updater.disableWebInstaller = true;
-    updater.on('checking-for-update', () => this.set('checking', 'GitHub wird auf neue Versionen geprüft …'));
-    updater.on('update-available', info => { this.status.targetVersion = String(info.version).slice(0, 40); this.set('available', `Version ${this.status.targetVersion} ist verfügbar.`); });
-    updater.on('update-not-available', () => this.set('current', 'Du verwendest die aktuelle veröffentlichte Version.'));
-    updater.on('download-progress', progress => { this.status.progress = Math.max(0, Math.min(100, Number(progress.percent) || 0)); this.set('downloading', 'Update wird heruntergeladen und geprüft …'); });
-    updater.on('update-downloaded', () => this.set('downloaded', installAllowed ? 'Update bereit. Installation startet erst auf deinen Klick.' : this.status.unsignedInstallAvailable ? 'Update geladen. Installation ohne Herausgebersignatur nur nach ausdrücklicher Warnungsbestätigung.' : 'Update geladen. Die automatische Installation benötigt eine signierte Veröffentlichung.'));
-    updater.on('error', () => { if (this.status.state === 'installing') this.onInstallFailure(); this.set('error', 'Das Update konnte nicht sicher geprüft, geladen oder gestartet werden. Deine Chats bleiben erhalten.'); });
-    if (source?.provider === 'github') this.configure(source);
+  constructor({source,version,beta=false,notify=()=>{}}) {
+    this.notify=notify;this.working=false;this.beta=beta===true;
+    this.status={state:'disabled',version,beta:this.beta,releases:[],targetVersion:null,releaseUrl:null,manualDownload:true,message:'Keine Updatequelle eingerichtet.'};
+    if(source?.provider==='github')this.configure(source);
   }
   configure(source) {
-    this.updater.channel = 'latest'; this.updater.allowDowngrade = false;
-    const valid = githubSource(repositoryUrl(source));
-    if (this.packaged) this.updater.setFeedURL({ ...valid, private: false });
-    this.source = valid;
-    this.status = { ...this.status, state: this.packaged ? 'idle' : 'disabled', message: this.packaged ? 'Bereit für GitHub-Releases.' : 'Updateprüfung ist in der installierten App verfügbar.', repository: repositoryUrl(valid), progress: 0, targetVersion: null, releases: [] };
+    this.source=githubSource(repositoryUrl(source));
+    this.status={...this.status,state:'idle',message:'Portable Ausgabe: neue Versionen selbst herunterladen und entpacken.',repository:repositoryUrl(this.source),releases:[],targetVersion:null,releaseUrl:null};
   }
-  sourceLocked() { return this.working || this.status.sourceChecking || ['checking', 'downloading', 'installing', 'downloaded'].includes(this.status.state); }
-  async saveRepository(value, persist) {
-    if (this.sourceLocked()) return { ok: false, error: 'Bitte den laufenden Vorgang abschließen. Nach einem geladenen Update die App vor dem Quellenwechsel neu starten.' };
-    this.status.sourceChecking = true; this.notify();
-    const previousSource = this.source; const previousStatus = this.snapshot();
-    let result;
+  sourceLocked(){return this.working||this.status.sourceChecking===true;}
+  snapshot(){return {...this.status,releases:this.status.releases.map(r=>({...r})),operationBusy:this.working};}
+  set(state,message){this.status.state=state;this.status.message=message;this.notify();}
+  async saveRepository(value,persist) {
+    if(this.sourceLocked())return {ok:false,error:'Bitte die laufende Updateprüfung abschließen.'};
+    this.status.sourceChecking=true;this.notify();
+    const previousSource=this.source;const previousStatus=this.snapshot();
     try {
-      try { result = await probeUpdateRepository(value); }
-      catch (error) { return { ok: false, error: error.message }; }
-      this.configure(result.source);
-      try { await persist(result.repository); }
-      catch (error) { if (previousSource) this.configure(previousSource); this.status = previousStatus; throw error; }
-      this.status.sourceMessage = result.notice;
-      return { ok: true, notice: result.notice };
-    } catch { return { ok: false, error: 'Repository nicht übernommen. Adresse, öffentliche Erreichbarkeit und verschlüsselten Speicher prüfen.' }; }
-    finally { this.status.sourceChecking = false; this.notify(); }
+      const result=await probeUpdateRepository(value);
+      await persist(result.repository);this.configure(result.source);this.status.sourceMessage=result.notice;
+      return {ok:true,notice:result.notice};
+    }catch{this.source=previousSource;this.status=previousStatus;return {ok:false,error:'Repository nicht übernommen. Adresse, öffentliche Erreichbarkeit und verschlüsselten Speicher prüfen.'};}
+    finally{this.status.sourceChecking=false;this.notify();}
   }
-  async saveBeta(value, persist) {
-    if (typeof value !== 'boolean' || this.sourceLocked()) return { ok: false, error: 'Bitte den laufenden Updatevorgang abschließen.' };
-    this.working = true; this.notify();
-    try {
-      await persist(value); this.beta = value; this.status.beta = value;
-      this.updater.allowPrerelease = value; this.configure(this.source); return { ok: true };
-    } catch { return { ok: false, error: 'Updatekanal konnte nicht verschlüsselt gespeichert werden.' }; }
-    finally { this.working = false; this.notify(); }
+  async saveBeta(value,persist) {
+    if(typeof value!=='boolean'||this.sourceLocked())return {ok:false,error:'Bitte die laufende Updateprüfung abschließen.'};
+    this.working=true;this.notify();
+    try{await persist(value);this.beta=value;this.status.beta=value;if(this.source)this.configure(this.source);return {ok:true};}
+    catch{return {ok:false,error:'Updatekanal konnte nicht verschlüsselt gespeichert werden.'};}
+    finally{this.working=false;this.notify();}
   }
-  snapshot() { return { ...this.status, operationBusy: this.working }; }
-  set(state, message) { this.status.state = state; this.status.message = message; this.notify(); }
   async check() {
-    if (this.sourceLocked() || this.status.state === 'disabled') return { ok: false, error: this.status.message };
-    if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0') return { ok: false, error: 'Die TLS-Prüfung darf für Updates nicht deaktiviert sein.' };
-    this.working = true; this.set('checking', 'GitHub wird geprüft …');
+    if(this.sourceLocked()||!this.source)return {ok:false,error:'Bitte eine Updatequelle einrichten oder die laufende Prüfung abschließen.'};
+    this.working=true;this.status.targetVersion=null;this.status.releaseUrl=null;this.status.releases=[];this.set('checking','GitHub wird auf neue Veröffentlichungen geprüft …');
     try {
-      if (this.beta) {
-        const releases = await newerReleases(this.source, this.status.version); this.status.releases = releases;
-        const target = releases.find(r => r.downloadable);
-        if (!target) { this.set('current', releases.length ? 'Neuere Veröffentlichungen gefunden, aber ohne Windows-Updatedateien.' : 'Keine neuere veröffentlichte Version vorhanden.'); return { ok: true }; }
-        const feed = repositoryUrl(this.source) + '/releases/download/' + encodeURIComponent(target.tag) + '/';
-        this.updater.channel = target.channel; this.updater.allowDowngrade = false;
-        this.updater.setFeedURL({ provider: 'generic', url: feed });
-      } else { this.updater.channel = 'latest'; this.updater.allowDowngrade = false; this.updater.setFeedURL({ ...this.source, private: false }); }
-      await this.updater.checkForUpdates(); return { ok: true };
-    }
-    catch { this.set('error', 'Die GitHub-Veröffentlichungen sind derzeit nicht erreichbar oder noch nicht vorhanden.'); return { ok: false, error: this.status.message }; }
-    finally { this.working = false; this.notify(); }
+      const releases=(await newerReleases(this.source,this.status.version)).filter(r=>this.beta||!r.prerelease);
+      this.status.releases=releases;const target=releases[0];
+      if(!target){this.set('current','Keine neuere veröffentlichte Version vorhanden.');return {ok:true};}
+      this.status.targetVersion=target.version;this.status.releaseUrl=target.url;
+      this.set('available',`Version ${target.version} ist verfügbar.${target.downloadable?' Portable ZIP selbst herunterladen und in einen neuen Ordner entpacken.':' Für diese Veröffentlichung wurde keine portable Windows-ZIP gefunden. Release-Seite prüfen.'}`);
+      return {ok:true};
+    }catch{this.set('error','GitHub konnte nicht vollständig geprüft werden. Bitte später erneut versuchen.');return {ok:false,error:this.status.message};}
+    finally{this.working=false;this.notify();}
   }
-  async download() {
-    if (this.sourceLocked() || this.status.state !== 'available') return { ok: false, error: 'Bitte zuerst auf Updates prüfen.' };
-    if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0') return { ok: false, error: 'Die TLS-Prüfung darf für Updates nicht deaktiviert sein.' };
-    this.working = true; this.set('downloading', 'Update wird heruntergeladen …');
-    try { await this.updater.downloadUpdate(); return { ok: true }; }
-    catch { this.set('error', 'Der Update-Download konnte nicht sicher abgeschlossen werden.'); return { ok: false, error: this.status.message }; }
-    finally { this.working = false; this.notify(); }
-  }
-  async install() {
-    if (!this.installAllowed && !this.status.unsignedInstallAvailable) return { ok: false, error: 'Für die automatische Installation fehlt eine signierte Release-Konfiguration. Nutze vorerst die Setup-Datei.' };
-    if (this.working || this.status.sourceChecking) return { ok: false, error: 'Bitte den laufenden Update-Vorgang abschließen.' };
-    if (this.status.state !== 'downloaded') return { ok: false, error: 'Es ist noch kein Update zur Installation bereit.' };
-    if (this.isBusy()) return { ok: false, error: 'Bitte erst die laufende Antwort oder Einstellungsänderung abschließen.' };
-    const targetVersion = this.status.targetVersion; const repository = this.status.repository;
-    this.working = true; this.notify();
-    try {
-      if (!this.installAllowed) {
-        const confirmed = await this.confirmUnsignedInstall({ targetVersion, repository });
-        if (confirmed !== true) return { ok: true, cancelled: true };
-      }
-      // Consent applies only to this downloaded update, never to future updates.
-      if (this.status.state !== 'downloaded' || this.status.targetVersion !== targetVersion || this.status.repository !== repository || this.isBusy()) return { ok: false, error: 'Der App- oder Updatestatus hat sich geändert. Bitte erneut installieren, sobald alle Vorgänge abgeschlossen sind.' };
-      this.set('installing', 'Der verschlüsselte Tresor wird gesichert …');
-      try { await this.beforeInstall(); }
-      catch { this.onInstallFailure(); this.set('downloaded', 'Die Tresorsicherung ist fehlgeschlagen oder es gibt ungesendete Eingaben. Das Update wurde nicht installiert.'); return { ok: false, error: this.status.message }; }
-      if (this.status.state !== 'installing') { this.onInstallFailure(); return { ok: false, error: this.status.message }; }
-      this.updater.quitAndInstall(false, true);
-      return this.status.state === 'installing' ? { ok: true } : { ok: false, error: this.status.message };
-    } catch {
-      this.onInstallFailure();
-      if (['downloaded', 'installing'].includes(this.status.state)) this.set('downloaded', 'Die Installation konnte nicht bestätigt oder gestartet werden. Das Update wurde nicht installiert.');
-      return { ok: false, error: this.status.message };
-    } finally { this.working = false; this.notify(); }
+  releasePage() {
+    if(this.sourceLocked()||this.status.state!=='available'||!this.status.releaseUrl)throw Error('Bitte zuerst auf Updates prüfen.');
+    const release=this.status.releases.find(r=>r.version===this.status.targetVersion);
+    if(!release)throw Error('Veröffentlichung nicht mehr verfügbar. Bitte erneut prüfen.');
+    return repositoryUrl(this.source)+'/releases/tag/'+encodeURIComponent(release.tag);
   }
 }

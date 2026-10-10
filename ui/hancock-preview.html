@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Hancock · KAIROS</title>
+  <script src="hancock.js" defer></script>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f3f5ef;color:#193d49;font:16px/1.5 system-ui,sans-serif}main{max-width:1080px;margin:auto;padding:64px 28px}.eyebrow{font-size:12px;letter-spacing:.16em;font-weight:700}h1{font-size:clamp(40px,7vw,72px);letter-spacing:-.06em;margin:12px 0}p{max-width:580px;color:#567078}.hero{display:flex;align-items:center;gap:60px;margin-bottom:48px}.hero kairos-hancock{width:240px;flex-shrink:0}.states{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}.card{padding:20px 8px;background:#fff;border:1px solid #dce5df;border-radius:20px;text-align:center}.card kairos-hancock{width:100%;max-width:140px}.card strong{display:block;font-size:14px}.card small{display:block;color:#567078;font-size:12px;margin-top:5px}button.control{background:#193d49;color:#fff;padding:12px 18px;border:0;border-radius:12px;font:inherit;cursor:pointer}button:focus-visible{outline:3px solid #ce8b1e;outline-offset:4px}.footer{margin-top:28px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}#feedback{color:#567078;font-size:14px}@media(max-width:700px){main{padding:32px 20px}.hero{gap:16px;flex-direction:column-reverse;align-items:flex-start}.hero kairos-hancock{width:180px}.states{grid-template-columns:repeat(2,1fr)}}
+  </style>
+</head>
+<body><main>
+  <div class="hero"><div><div class="eyebrow">DEIN KAIROS-BEGLEITER</div><h1>Hallo, Hancock.</h1><p>Ein kleiner Roboter mit einem großen Blick. Türkisfarbener Körper, ein freundliches Gesicht und eine goldene Signalantenne.</p><p>Er atmet, blinzelt und freut sich, wenn etwas fertig ist. Beweg die Maus über ihn oder klick ihn an.</p></div><kairos-hancock state="idle"></kairos-hancock></div>
+  <div class="states">
+    <div class="card"><kairos-hancock state="idle"></kairos-hancock><strong>Bereit</strong><small>Ruhig und aufmerksam</small></div>
+    <div class="card"><kairos-hancock state="waiting"></kairos-hancock><strong>Wartet auf Antwort</strong><small>Die Antenne pulsiert</small></div>
+    <div class="card"><kairos-hancock state="done"></kairos-hancock><strong>Fertig!</strong><small>Ein kleiner Freudensprung</small></div>
+    <div class="card"><kairos-hancock state="attention"></kairos-hancock><strong>Du bist gefragt</strong><small>Ein goldenes Signal</small></div>
+    <div class="card"><kairos-hancock state="error"></kairos-hancock><strong>Etwas hakt</strong><small>Ein rotes Signal</small></div>
+  </div>
+  <div class="footer"><button type="button" class="control" id="pause" aria-pressed="false">Animationen pausieren</button><span id="feedback" role="status">Figurenentwurf · Die Zustände sind hier Beispiele.</span></div>
+  <script>
+    document.getElementById('pause').addEventListener('click',event=>{
+      const pause=event.currentTarget.getAttribute('aria-pressed')!=='true';
+      event.currentTarget.setAttribute('aria-pressed',String(pause));
+      event.currentTarget.textContent=pause?'Animationen fortsetzen':'Animationen pausieren';
+      document.querySelectorAll('kairos-hancock').forEach(pet=>pet.toggleAttribute('paused',pause));
+    });
+    document.addEventListener('hancock-open',()=>{
+      document.getElementById('feedback').textContent='Hier öffnet Hancock später den zugehörigen KAIROS-Bereich.';
+    });
+  </script>
+</main></body></html>

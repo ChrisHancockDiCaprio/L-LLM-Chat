@@ -1,0 +1,12 @@
+import {mkdir,mkdtemp,writeFile} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+import {join} from 'node:path';
+import {spawn} from 'node:child_process';
+const root=fileURLToPath(new URL('../',import.meta.url));
+const output=fileURLToPath(new URL('../../.test-output/',import.meta.url));
+await mkdir(output,{recursive:true});const directory=await mkdtemp(join(output,'hancock-app-'));
+await writeFile(join(directory,'.qwen-chat-test-root'),'Isolated Hancock UI verification\n');
+const env={...process.env};delete env.ELECTRON_RUN_AS_NODE;
+const child=spawn(process.execPath,[join(root,'node_modules/electron/cli.js'),root,'--verify-hancock','--release-test-root='+directory],{env,stdio:'inherit',windowsHide:true});
+child.on('error',error=>{console.error(error);process.exitCode=1;});
+child.on('exit',code=>{console.log('Hancock-Prüfbericht: '+join(directory,'Vault','verification-hancock.json'));process.exitCode=code??1;});

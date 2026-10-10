@@ -11,7 +11,7 @@ import { sendChat } from '../src/ollama-client.mjs';
 import { testCipher, makeTestCipher } from './test-cipher.mjs';
 
 async function folder() {
-  const base = fileURLToPath(new URL('../../../work/qwen-chat-security-tests/', import.meta.url));
+  const base = fileURLToPath(new URL('../../.test-output/qwen-chat-security-tests/', import.meta.url));
   await mkdir(base, { recursive: true }); return mkdtemp(join(base, 'vault-'));
 }
 test('vault stores no plaintext and wrong key or tampering fails closed', async () => {

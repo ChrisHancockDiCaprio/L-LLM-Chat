@@ -1,0 +1,23 @@
+:host { display:inline-block; width:180px; color:#193d49; }
+          button { display:block; width:100%; border:0; padding:0; background:transparent; cursor:pointer; border-radius:24px; }
+          button:focus-visible { outline:3px solid #ce8b1e; outline-offset:4px; }
+          svg { width:100%; height:auto; overflow:visible; display:block; }
+          .body { transform-origin:120px 188px; animation:breathe 3.6s ease-in-out infinite; }
+          .eyes { transform-origin:120px 121px; animation:blink 6s infinite; }
+          .arm-right { transform-origin:182px 116px; }
+          .mouth { fill:none; stroke:#f9f4e6; stroke-width:3; stroke-linecap:round; }
+          .indicator { fill:#f5bf55; }
+          :host([state=waiting]) .body { animation:wait 1.5s ease-in-out infinite; }
+          :host([state=waiting]) .indicator { animation:pulse 1.2s ease-in-out infinite; }
+          :host([state=done]) .body { animation:celebrate .65s ease-out 2; }
+          :host([state=done]) .arm-right { transform:rotate(-115deg); }
+          :host([state=error]) .indicator { fill:#ef786b; }
+          :host([state=error]) .body { animation:none; transform:rotate(-5deg); }
+          :host([state=attention]) .indicator { animation:pulse .8s ease-in-out infinite; }
+          :host([paused]) * { animation:none !important; }
+          @keyframes breathe { 50% { transform:translateY(-3px); } }
+          @keyframes wait { 50% { transform:translateY(-2px) rotate(3deg); } }
+          @keyframes blink { 0%,43%,47%,100% { transform:scaleY(1); } 45% { transform:scaleY(.08); } }
+          @keyframes celebrate { 45% { transform:translateY(-17px) rotate(-4deg); } }
+          @keyframes pulse { 50% { opacity:.35; } }
+          @media (prefers-reduced-motion:reduce) { * { animation:none !important; } }

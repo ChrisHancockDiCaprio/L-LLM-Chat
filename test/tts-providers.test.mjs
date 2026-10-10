@@ -1,7 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,readFile,writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {fileURLToPath} from 'node:url';
+const tmpdir = () => fileURLToPath(new URL('../../.test-output/', import.meta.url));
 import {join} from 'node:path';
 import {SecureFile} from '../src/secure-file.mjs';
 import {testCipher} from './test-cipher.mjs';

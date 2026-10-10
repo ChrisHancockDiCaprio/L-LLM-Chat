@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { writeFile, readFile } from 'node:fs/promises';
-import { dialog } from 'electron';
+import { dialog, shell } from 'electron';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { SettingsStore } from './settings-store.mjs';
@@ -17,6 +17,7 @@ export async function verifyUpdate({ root, dataDir, window, store, settings, cre
   dialog.showSaveDialog = async () => ({ canceled: false, filePath: exportFile });
   globalThis.fetch = async (url, init) => {
     assert.equal(init.redirect, 'error');
+    if (url.includes('/releases?')) return json([{tag_name:'v2.0.0',draft:false,prerelease:false,assets:[{name:'KAIROS-Portable-2.0.0-x64.zip'}],html_url:'https://evil.example'}]);
     if (url.includes('api.github.com')) return url.endsWith('/releases/latest') ? new Response('', { status: 404 }) : json({ private: false, full_name: 'FixtureOwner/FixtureUpdates' });
     if (url.includes('gateway.example')) {
       assert.equal(init.headers.Authorization, 'Bearer FAKE-UI-TEST-KEY');
@@ -83,14 +84,14 @@ export async function verifyUpdate({ root, dataDir, window, store, settings, cre
     await until(async () => { try { return (await readFile(exportFile)).equals(imageBytes); } catch { return false; } });
     assert.deepEqual(await readFile(exportFile), imageBytes); report.imageExportMatches = true;
     window.showInactive(); await run(`document.querySelector('#image-options').open = true; new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
-    await new Promise(resolve => setTimeout(resolve, 200)); await writeFile(join(root, 'preview-comfy-chat.png'), (await window.webContents.capturePage()).toPNG()); window.hide();
+    await new Promise(resolve => setTimeout(resolve, 200)); await writeFile(join(dataDir, 'preview-comfy-chat.png'), (await window.webContents.capturePage()).toPNG()); window.hide();
     await run(`document.querySelector('#settings-button').click(); document.querySelector('#tab-updates').click(); document.querySelector('#update-repository').value = 'https://github.com/FixtureOwner/FixtureUpdates'; document.querySelector('#update-repository').dispatchEvent(new Event('input')); document.querySelector('#update-source-form').requestSubmit();`);
     await until(() => !snapshot().settingsBusy && settings.db.updateRepository === 'https://github.com/FixtureOwner/FixtureUpdates');
     report.updateSourceSavedAndNoReleaseExplained = await run(`document.querySelector('#update-source-status').textContent.includes('Noch kein stabiles Release')`); assert.ok(report.updateSourceSavedAndNoReleaseExplained);
     const rejected = await run(`window.qwenChat.saveUpdateRepository('https://foreign.example/repo')`); assert.equal(rejected.ok, false); assert.equal(settings.db.updateRepository, 'https://github.com/FixtureOwner/FixtureUpdates'); report.invalidSourceKeepsPrevious = true;
     window.showInactive(); await run(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
     await new Promise(resolve => setTimeout(resolve, 200));
-    await writeFile(join(root, 'preview-update-settings.png'), (await window.webContents.capturePage()).toPNG());
+    await writeFile(join(dataDir, 'preview-update-settings.png'), (await window.webContents.capturePage()).toPNG());
     window.hide();
     const restoredSettings = new SettingsStore(dataDir, cipher); const restoredCredentials = new CredentialStore(dataDir, cipher); const restoredHistory = new SessionStore(dataDir, cipher);
     await restoredSettings.load(); await restoredCredentials.load(); await restoredHistory.load();
@@ -141,37 +142,24 @@ export async function verifyUpdate({ root, dataDir, window, store, settings, cre
     await until(() => !store.db.sessions.some(s => s.id === deletedId)); report.chatDeletionViaUI = true;
     assert.equal(await run('document.title'), 'KAIROS');
     Object.assign(report,await (await import('./verify-tts.mjs')).verifyTts({window,store,publish,dataDir}));
-    Object.assign(report,await (await import('./verify-math.mjs')).verifyMath({root,window,store,publish}));
-    // Exercise the real IPC, warning configuration, backup and button in an isolated vault.
-    // Only the native dialog response and installer launch are replaced; no installer runs.
-    const previousMessageBox = dialog.showMessageBox; const previousInstall = updates.updater.quitAndInstall;
-    let accept = false; let prompts = 0; let installs = 0;
+    Object.assign(report,await (await import('./verify-math.mjs')).verifyMath({root,window,store,publish,dataDir}));
+    const originalOpen=shell.openExternal;const opened=[];
     try {
-      dialog.showMessageBox = async (parent, options) => {
-        assert.equal(parent, window); assert.equal(options.type, 'warning');
-        assert.equal(options.defaultId, 0); assert.equal(options.cancelId, 0);
-        assert.match(options.detail, /FixtureOwner\/FixtureUpdates/); assert.match(options.detail, /0\.4\.3/);
-        assert.match(options.message, /Herausgebersignatur/); prompts++; return { response: accept ? 1 : 0 };
-      };
-      updates.updater.quitAndInstall = (silent, restart) => { assert.equal(silent, false); assert.equal(restart, true); installs++; };
-      updates.updater.emit('update-available', { version: '0.4.3' }); updates.updater.emit('update-downloaded');
-      await run("document.querySelector('#message-input').value='';document.querySelector('#settings-button').click();document.querySelector('#tab-updates').click()");
-      await until(async () => !(await run("document.querySelector('#update-install').disabled")));
-      await run("document.querySelector('#update-install').click()");
-      await until(() => prompts === 1 && !updates.snapshot().operationBusy);
-      assert.equal(installs, 0); assert.equal(updates.snapshot().state, 'downloaded');
-      accept = true; await run("document.querySelector('#update-install').click()");
-      await until(() => installs === 1 && !updates.snapshot().operationBusy);
-      assert.equal(prompts, 2);
-      report.unsignedUpdateWarningCancelAndInstall = true;
-      const { readdir } = await import('node:fs/promises');
-      const backups = (await readdir(join(dataDir, 'BeforeUpdate'))).filter(name => !name.endsWith('.pending'));
-      const inventory = JSON.parse(await cipher.decrypt(await readFile(join(dataDir, 'BeforeUpdate', backups.at(-1), 'inventory.vault'))));
-      assert.ok(inventory.entries.some(entry => entry.name === 'workflows.vault'));
-      assert.ok(inventory.entries.some(entry => entry.name === 'tts.vault'));
-      report.updateBackupIncludesAllVaultStores = true;
-    } finally { dialog.showMessageBox = previousMessageBox; updates.updater.quitAndInstall = previousInstall; }
-    await writeFile(join(root, 'verification-update.json'), JSON.stringify(report, null, 2)); return report;
+      shell.openExternal=async url=>{opened.push(url);};
+      await run("document.querySelector('#settings-button').click();document.querySelector('#tab-updates').click()");
+      assert.equal((await run('window.qwenChat.checkUpdates()')).ok,true);
+      await until(async()=>!(await run("document.querySelector('#update-open-release').disabled")));
+      await run("document.querySelector('#update-open-release').click()");
+      await until(()=>opened.length===1);
+      assert.equal(opened[0],'https://github.com/FixtureOwner/FixtureUpdates/releases/tag/v2.0.0');
+      assert.equal(await run('typeof window.qwenChat.installUpdate'),'undefined');
+      assert.equal(await run('typeof window.qwenChat.downloadUpdate'),'undefined');
+      assert.equal(await run('Boolean(document.querySelector("#update-install"))'),false);
+      report.manualReleaseCheckAndSafeBrowserLink=true;report.noInstallerOrProgramDownload=true;
+      await window.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true});await new Promise(resolve=>setTimeout(resolve,200));
+      await writeFile(join(dataDir,'portable-update-settings.png'),(await window.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true})).toPNG());
+    }finally{shell.openExternal=originalOpen;}
+    await writeFile(join(dataDir, 'verification-update.json'), JSON.stringify(report, null, 2)); return report;
   } finally { globalThis.fetch = previousFetch; dialog.showSaveDialog = previousSaveDialog; }
 }
 async function until(predicate) { for (let n = 0; n < 150; n++) { if (await predicate()) { await new Promise(resolve => setTimeout(resolve, 80)); return; } await new Promise(resolve => setTimeout(resolve, 80)); } throw new Error('Update UI verification timed out'); }

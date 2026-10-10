@@ -12,7 +12,7 @@ const profile={id:'comfy',name:'Comfy',type:'comfyui',baseUrl:'https://comfy.exa
 const json=data=>new Response(JSON.stringify(data));
 const job={serverId:'own-id',clientId:'own-client',outputNode:'5'};
 async function mockFetch(fn,run){const old=globalThis.fetch;globalThis.fetch=fn;try{return await run()}finally{globalThis.fetch=old}}
-async function dir(){const base=fileURLToPath(new URL('../../../work/job-tests-031/',import.meta.url));await mkdir(base,{recursive:true});return mkdtemp(join(base,'case-'))}
+async function dir(){const base=fileURLToPath(new URL('../../.test-output/job-tests-031/',import.meta.url));await mkdir(base,{recursive:true});return mkdtemp(join(base,'case-'))}
 for(const type of ['ollama','openai-chat'])test(type+' waits beyond 240 and 300 seconds for one original reply with honest unknown status',async t=>{
  t.mock.timers.enable({apis:['setTimeout']});let finish;let calls=0;let sentSignal;const notices=[];
  const p={...profile,type,options:{temperature:0.7,num_predict:100},model:'m'};

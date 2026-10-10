@@ -1,8 +1,10 @@
 import { SecureFile } from './secure-file.mjs';
 import { randomUUID } from 'node:crypto';
+import {endpointScope} from './api-endpoint.mjs';
 export const JOB_STATES = ['unknown','queued','running','completed','failed','cancelled','missing'];
 export function connectionIdentity(profile) {
-  return JSON.stringify([profile.id, profile.type, profile.model, profile.ssh?.enabled ? ['ssh',profile.ssh.host,profile.ssh.port,profile.ssh.username,profile.ssh.targetHost,profile.ssh.targetPort,profile.ssh.targetTls === true] : profile.baseUrl]);
+  const identity=[profile.id, profile.type, profile.model, profile.ssh?.enabled ? ['ssh',profile.ssh.host,profile.ssh.port,profile.ssh.username,profile.ssh.targetHost,profile.ssh.targetPort,profile.ssh.targetTls === true] : profile.baseUrl];
+  const scope=endpointScope(profile);if(scope)identity.push(scope);return JSON.stringify(identity);
 }
 export function boundJob(job, profile) { return !!profile && connectionIdentity(profile) === job.connectionIdentity; }
 export class JobStore {

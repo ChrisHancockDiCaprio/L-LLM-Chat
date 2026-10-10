@@ -38,9 +38,11 @@ export async function probeUpdateRepository(value) {
   const release = await request(`${api}/releases/latest`, true);
   if (release && (release.draft !== false || release.prerelease !== false || !Array.isArray(release.assets))) throw new Error('GitHub liefert keine gültige stabile Veröffentlichung.');
   const assets = release?.assets.map(a => a.name) ?? [];
-  const ready = assets.includes('latest.yml') && assets.some(name => typeof name === 'string' && name.endsWith('.exe'));
-  return { source: canonical, repository: repositoryUrl(canonical), ready, notice: !release ? 'Repository erreichbar. Noch kein stabiles Release veröffentlicht; Entwürfe stehen für Updates nicht bereit.' : ready ? 'Repository erreichbar. Windows-Update-Dateien vorhanden; mit „Auf Updates prüfen“ die Version prüfen.' : 'Repository erreichbar. Im neuesten Release fehlen Windows-Setup oder latest.yml.' };
+  const ready = assets.some(portableAsset);
+  return { source: canonical, repository: repositoryUrl(canonical), ready, notice: !release ? 'Repository erreichbar. Noch kein stabiles Release veröffentlicht; Entwürfe stehen für Updates nicht bereit.' : ready ? 'Repository erreichbar. Portable Windows-ZIP vorhanden; mit „Auf Updates prüfen“ die Version prüfen.' : 'Repository erreichbar. Im neuesten Release fehlt eine portable Windows-ZIP.' };
 }
+
+const portableAsset=name=>typeof name==='string'&&/^KAIROS-Portable-[A-Za-z0-9.+-]+-x64\.zip$/i.test(name);
 
 // Read public releases rather than infer a channel from the tag's prerelease label.
 export async function newerReleases(source, version) {
@@ -55,11 +57,11 @@ export async function newerReleases(source, version) {
     if (!Array.isArray(entries)) throw new Error('Ungültige GitHub-Veröffentlichungen.');
     for (const r of entries) {
       const next = semver.valid(r.tag_name);
-      if (r.draft || !next || !semver.gt(next, version)) continue;
+      if (r.draft!==false || typeof r.prerelease!=='boolean' || !next || !semver.gt(next, version)) continue;
       const names = (r.assets ?? []).map(a => a.name);
       const channel = names.includes('latest.yml') ? 'latest' : String(semver.prerelease(next)?.[0] ?? 'latest');
       releases.push({ channel, version: next, tag: r.tag_name, prerelease: r.prerelease === true,
-        downloadable: names.includes(channel + '.yml') && names.some(n => typeof n === 'string' && n.endsWith('.exe')),
+        downloadable: names.some(portableAsset),
         url: repositoryUrl(checked) + '/releases/tag/' + encodeURIComponent(r.tag_name) });
     }
     if (entries.length < 100) return releases.sort((a,b) => semver.rcompare(a.version, b.version));

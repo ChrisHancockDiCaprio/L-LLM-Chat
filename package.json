@@ -1,17 +1,19 @@
 {
   "name": "qwen-chat-windows",
   "productName": "KAIROS",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "type": "module",
   "main": "src/main.mjs",
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.mjs",
+    "verify:hancock": "node scripts/verify-hancock.mjs",
+    "verify:providers": "node scripts/verify-providers.mjs",
+    "licenses": "node scripts/license-inventory.mjs",
     "verify": "electron . --verify",
-    "verify:update": "electron . --verify-update",
-    "dist": "node scripts/build-windows.cjs --config electron-builder.config.cjs --publish never",
-    "dist:msi": "node node_modules/electron-builder/cli.js --config electron-builder.msi.config.cjs --publish never"
+    "verify:update": "node scripts/verify-update.mjs",
+    "dist": "node scripts/build-windows.cjs --config electron-builder.config.cjs --publish never"
   },
   "devDependencies": {
     "electron": "44.6.0",
@@ -21,7 +23,6 @@
   "dependencies": {
     "@xmldom/xmldom": "0.9.12",
     "dompurify": "3.4.16",
-    "electron-updater": "6.8.9",
     "katex": "0.19.0",
     "marked": "18.1.0",
     "semver": "7.8.5",

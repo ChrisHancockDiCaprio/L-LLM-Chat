@@ -1,5 +1,11 @@
 # KAIROS installieren
 
+**Aktuell: Portable 0.5.1.** [Portable Anleitung](PORTABLE.md). ZIP vollständig in einen neuen Ordner entpacken, KAIROS schließen und die neue KAIROS.exe starten. Ein Installer und Node.js sind nicht erforderlich. Der vorhandene Windows-Tresor bleibt unter `%LOCALAPPDATA%\QwenChat\Vault` erhalten; er ist an dein Windows-Konto gebunden.
+
+Die App prüft GitHub-Veröffentlichungen und öffnet deren Release-Seite. Download und Programmwechsel erfolgen manuell. Automatischer Download, Installerstart und Installation beim Beenden sind entfernt. Ab 0.5.1 erzeugt `npm run dist` eine portable ZIP; die MSI-/NSIS-Befehle und Beschreibungen unten gehören zu früheren Ausgaben und gelten nicht mehr für den aktuellen Build.
+
+## Historische Installer-Ausgaben bis 0.5.0
+
 Aktueller Stand **0.4.2**: siehe [Releasehinweise](release/notes-0.4.2.md). KAIROS hieß bisher Qwen Chat; App-ID und Tresorpfad bleiben erhalten. Setup-Dateien heißen `KAIROS-Setup-0.4.2-x64.exe` / `.msi`. Ältere Installations- und Prüfstände unten sind historisch.
 
 1. Eine laufende KAIROS-/Qwen-Chat-App schließen, nachdem Antworten und Eingaben abgeschlossen sind.

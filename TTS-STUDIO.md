@@ -1,5 +1,7 @@
 # KAIROS Sprachstudio
 
+**Geplante Ergänzung (10.10.2026):** Gemeinsame einfache Verbindungseinrichtung und KittenTTS von KittenML, zunächst über eine eigene lokale Serverbrücke. Modell-/Versions-/Sprachprüfung, gezielte Hancock-Textübernahme und getrennte Lizenznachweise gehören zur Abnahme. [Plan für einfache TTS-Verbindungen](docs/KAIROS-TTS-EINFACHE-VERBINDUNG.md). Diese Verbindung ist noch nicht implementiert.
+
 Das Sprachstudio ist ein eigener Reiter. Es arbeitet ohne ausgewähltes Chatmodell, auch während einer Chat-/Bildanfrage. Chat und TTS haben getrennte Abbruchsignale. Ein beschädigter TTS-Tresor blockiert nur das Sprachstudio. Chat-Antworten können weiterhin bewusst als Text übernommen werden.
 
 ## Azure Speech (dein SDK-Beispiel)

@@ -22,7 +22,7 @@ export async function registerTts({register,directory,cipher,dialog,window,publi
     if(db.result){db.result.extension??='wav';db.result.mime??='audio/wav';validateAudio(Buffer.from(db.result.base64,'base64'),db.result.extension);}
   }catch(error){if(error.code!=='ENOENT'){unavailable='Der TTS-Tresor konnte nicht geöffnet werden. Er bleibt erhalten. Chat ist weiterhin verfügbar.';db={connections:{},provider:'azure-speech'};}}
   const connection=()=>db.connections[db.provider];
-  const snapshot=()=>({provider:db.provider,unavailable,connection:publicConnection(connection()),connections:Object.fromEntries(Object.entries(db.connections).map(([id,c])=>[id,publicConnection(c)])),capabilities:caps,busy,referenceName:db.reference?.name??'',hasResult:Boolean(db.result),resultFormat:db.result?.extension,exportPath:db.exportPath??'',python:pythonExample(connection())});
+  const snapshot=()=>({provider:db.provider,unavailable,connection:publicConnection(connection()),connections:Object.fromEntries(Object.entries(db.connections).map(([id,c])=>[id,publicConnection(c)])),capabilities:caps,busy,referenceName:db.reference?.name??'',hasResult:Boolean(db.result),resultId:db.result?.id,resultFormat:db.result?.extension,exportPath:db.exportPath??'',python:pythonExample(connection())});
   const available=()=>{if(unavailable)throw Error(unavailable);if(busy||isLocked())throw Error('Bitte den laufenden TTS-Vorgang abschließen.');};
   async function operation(fn) {
     try{available();}catch(error){return {ok:false,error:error.message};}

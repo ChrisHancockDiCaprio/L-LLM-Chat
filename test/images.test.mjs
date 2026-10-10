@@ -10,7 +10,7 @@ import { selectContext, SessionStore } from '../src/session-store.mjs';
 import { testCipher } from './test-cipher.mjs';
 const png = (await readFile(new URL('../assets/icon.png', import.meta.url))).toString('base64');
 const profile = { type: 'image-api', enabled: true, model: 'sd-cpp-local', baseUrl: 'https://images.example', allowHttp: false };
-async function folder() { const base = fileURLToPath(new URL('../../../work/qwen-chat-image-tests/', import.meta.url)); await mkdir(base, { recursive: true }); return mkdtemp(join(base, 'test-')); }
+async function folder() { const base = fileURLToPath(new URL('../../.test-output/qwen-chat-image-tests/', import.meta.url)); await mkdir(base, { recursive: true }); return mkdtemp(join(base, 'test-')); }
 async function mockFetch(mock, run) { const before = globalThis.fetch; globalThis.fetch = mock; try { await run(); } finally { globalThis.fetch = before; } }
 const response = data => new Response(JSON.stringify(data));
 test('attachments persist only encrypted, restore images/files and keep absolute paths out of previews', async () => {

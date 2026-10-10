@@ -1,0 +1,86 @@
+import assert from 'node:assert/strict';
+import {writeFile,readFile} from 'node:fs/promises';
+import {join} from 'node:path';
+import {SettingsStore} from './settings-store.mjs';
+import {dialog,BrowserWindow} from 'electron';
+
+export async function verifyHancock({window,store,settings,credentials,cipher,dataDir,publish}) {
+  const run=code=>window.webContents.executeJavaScript(code);
+  const until=async fn=>{for(let i=0;i<150;i++){if(await fn())return;await new Promise(r=>setTimeout(r,30));}throw Error('Hancock verification timeout');};
+  const originalFetch=globalThis.fetch;let posts=0;let finish;
+  const originalPicker=dialog.showOpenDialog;
+  globalThis.fetch=async(url,init)=>{
+    assert.equal(init.redirect,'error');assert.equal(init.headers.Authorization,'Bearer HANCOCK-FIXTURE-KEY');
+    if(url.endsWith('/v1/models'))return new Response(JSON.stringify({data:[{id:'fixture'}]}));
+    assert.ok(url.endsWith('/v1/chat/completions'));posts++;assert.equal(JSON.parse(init.body).messages.at(-1).content,'HANCOCK-FIXTURE-MESSAGE');
+    return new Promise(resolve=>{finish=()=>resolve(new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:'Hallo Hancock!'}}]})));});
+  };
+  try {
+    await settings.commit({version:1,activeId:null,profiles:[]});
+    const ref=await credentials.add('https://hancock-fixture.example',{type:'bearer',token:'HANCOCK-FIXTURE-KEY'});
+    await settings.importServer({type:'openai-chat',name:'Hancock-Test',baseUrl:'https://hancock-fixture.example',models:[{name:'fixture',type:'openai-chat'}],authRef:ref,authType:'bearer'});
+    await settings.toggle(settings.db.profiles[0].id,true);await settings.select(settings.db.profiles[0].id);await store.create();publish();
+    await until(()=>run('Boolean(document.querySelector("#active-ai").value)'));
+    await run('document.querySelector("#hancock-show").click()');
+    assert.equal(await run('document.querySelector("#hancock-card").hidden'),false);
+    assert.equal(posts,0);
+    await run('document.querySelector("#hancock-message").value="HANCOCK-FIXTURE-MESSAGE";document.querySelector("#hancock-message").dispatchEvent(new Event("input"))');
+    assert.equal(await run('document.querySelector("#message-input").value'),'HANCOCK-FIXTURE-MESSAGE');assert.equal(posts,0);
+    await run('document.querySelector("#hancock-send").click()');await until(()=>posts===1);
+    assert.equal(await run('document.querySelector("#hancock-pet").getAttribute("state")'),'waiting');
+    assert.equal(await run('document.querySelector("#hancock-message").disabled'),true);
+    assert.equal((await run('window.qwenChat.send("MUST-NOT-SEND")')).ok,false);assert.equal(posts,1);
+    finish();await until(()=>run('!document.querySelector("#waiting").hidden === false && document.querySelector("#messages").textContent.includes("Hallo Hancock!")'));
+    assert.equal(posts,1);assert.equal(store.active.messages.length,2);
+    assert.equal(await run('document.querySelector("#hancock-pet").getAttribute("state")'),'done');
+    const resultChat=store.db.activeId;const other=store.db.sessions.find(s=>s.id!==resultChat);
+    await run(`document.querySelector("#hancock-conversation").value=${JSON.stringify(other.id)};document.querySelector("#hancock-conversation").dispatchEvent(new Event("change"))`);
+    await until(()=>store.db.activeId===other.id);assert.equal(posts,1);
+    await run('document.querySelector("#hancock-large").click()');await until(()=>store.db.activeId===resultChat);
+    await run('document.querySelector("#hancock-show").click()');
+    await run('document.querySelector("#hancock-card [data-hancock-action=image]").click()');
+    assert.match(await run('document.querySelector("#hancock-feedback").textContent'),/Bildprofil/);
+    await run('document.querySelector("#hancock-card [data-hancock-action=tts]").click()');
+    assert.equal(await run('document.querySelector("#tts-panel").hidden'),false);
+    await run('document.querySelector("#hancock-show").click();document.querySelector("#hancock-pause").click()');
+    await until(()=>settings.db.hancock.paused);
+    const restored=new SettingsStore(dataDir,cipher);await restored.load();assert.equal(restored.db.hancock.paused,true);
+    assert.equal((await run('window.qwenChat.saveHancock({visible:"yes",paused:false})')).ok,false);
+    assert.equal((await run('window.qwenChat.dropAttachment("C:\\must-not-read.txt")')).ok,false);
+    assert.equal((await run('window.qwenChat.dropAttachment(new File(["text"],"virtual.txt"))')).ok,false);
+    const file=join(dataDir,'hancock-attachment.txt');await writeFile(file,'Local attachment fixture');
+    dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});
+    await run('document.querySelector("#hancock-attach").click()');
+    await until(()=>run('document.querySelector("#hancock-attachments").textContent.includes("hancock-attachment.txt")'));
+    assert.ok(await run('document.querySelector("#attachment-list").textContent.includes("hancock-attachment.txt")'));
+    assert.equal(posts,1);
+    await run('document.querySelector("#hancock-hide").click()');await until(()=>run('document.querySelector("#hancock-dock").hidden'));
+    await run('document.querySelector("#hancock-show").click()');await until(()=>run('!document.querySelector("#hancock-card").hidden'));
+    assert.equal(await run('typeof require'),'undefined');assert.equal(await run('window.qwenChat.token'),undefined);
+    assert.equal((await readFile(join(dataDir,'history.vault'))).includes(Buffer.from('HANCOCK-FIXTURE-MESSAGE')),false);
+    await run('document.querySelector("#chat-tab").click()');
+    await run('document.querySelector("#hancock-message").focus()');publish();
+    await new Promise(r=>setTimeout(r,60));
+    assert.equal(await run('document.activeElement.id'),'hancock-message');
+    window.setSize(800,600);await new Promise(r=>setTimeout(r,120));
+    const bounds=await run('(()=>{const r=document.querySelector("#hancock-card").getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:innerWidth,height:innerHeight};})()');
+    assert.ok(bounds.left>=0 && bounds.top>=0 && bounds.right<=bounds.width && bounds.bottom<=bounds.height);
+    await run('document.querySelector("#hancock-message").dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
+    assert.equal(await run('document.querySelector("#hancock-card").hidden'),true);
+    await run('document.querySelector("#hancock-show").click()');window.setSize(1140,810);
+    // Hidden test windows need an awake compositor to capture the current frame.
+    await window.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true});
+    await new Promise(r=>setTimeout(r,300));
+    assert.equal(await run('getComputedStyle(document.querySelector("#hancock-pet").shadowRoot.querySelector("button")).backgroundColor'),'rgba(0, 0, 0, 0)');
+    await writeFile(join(dataDir,'hancock-integrated.png'),(await window.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true})).toPNG());
+    assert.equal((await run('window.qwenChat.showLicenses()')).ok,true);
+    const notices=BrowserWindow.getAllWindows().find(view=>view!==window);
+    assert.equal(await notices.webContents.executeJavaScript('typeof window.qwenChat'),'undefined');
+    assert.equal(await notices.webContents.executeJavaScript('typeof require'),'undefined');
+    const licenseText=await notices.webContents.executeJavaScript('document.body.textContent');
+    assert.match(licenseText,/marked/);assert.doesNotMatch(licenseText,/Original-Lizenztext fehlt|lazy-val|electron-updater/);
+    notices.close();
+    const report={ok:true,posts,sharedHistory:true,sharedDraft:true,sharedAttachments:true,conversationSelection:true,resultNavigation:true,filesNeverSendAutomatically:true,persistedPreferences:true,noRendererNode:true,encrypted:true,smallWindow:true,keyboardAndFocus:true,isolatedLicenseView:true};
+    await writeFile(join(dataDir,'verification-hancock.json'),JSON.stringify(report,null,2));return report;
+  } finally {globalThis.fetch=originalFetch;dialog.showOpenDialog=originalPicker;}
+}

@@ -6,6 +6,7 @@ let imageProfile; let trustId;
 const jobLabels={queued:"Wartet",running:"Läuft",completed:"Abgeschlossen",failed:"Fehlgeschlagen",cancelled:"Serverseitig abgebrochen",missing:"Nicht mehr auffindbar",unknown:"Status unbekannt"};
 const comfyFields = { prompt: 'Prompt', negativePrompt: 'Negative Prompt', width: 'Breite', height: 'Höhe', steps: 'Schritte', seed: 'Seed', cfg: 'CFG' };
 const input = $('#message-input');
+$('#open-source-notices').addEventListener('click',()=>void api.showLicenses());
 function renderAttachments() {
   $('#attachment-list').replaceChildren(...draftAttachments.map(attachment => {
     const chip = document.createElement('div'); chip.className = 'draft-attachment';
@@ -18,6 +19,7 @@ function renderAttachments() {
   }));
   const p = state?.settings.profiles.find(p => p.id === state.settings.activeId);
   $('#attach-file').disabled = !p || p.type === 'comfyui' || !(p.uploads?.files || p.uploads?.photos) || Boolean(state?.busy || state?.settingsBusy || draftAttachments.length >= 4);
+  kairosHancockPanel.syncDraft();
 }
 $('#attach-file').addEventListener('click', async () => {
   $('#attach-file').disabled = true;
@@ -28,7 +30,7 @@ $('#attach-file').addEventListener('click', async () => {
 const time = iso => new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' }).format(new Date(iso));
 const date = iso => new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'short', timeZone: 'Europe/Berlin' }).format(new Date(iso));
 
-function error(message) { $('#notice').textContent = message; $('#notice').hidden = !message; }
+function error(message) { $('#notice').textContent = message; $('#notice').hidden = !message; kairosHancockPanel.notice(message); }
 function renderJobs() {
   $('#job-list').replaceChildren(...(state.jobs??[]).filter(j=>j.chatId===state.activeId && j.state!=='completed').map(job=>{
     const card=document.createElement('div');card.className='security-card job-card';
@@ -112,6 +114,7 @@ function render(next) {
     const author = document.createElement('strong'); author.textContent = message.role === 'assistant' ? (message.model ?? 'KI') : 'Du';
     const stamp = document.createElement('time'); stamp.textContent = time(message.createdAt); stamp.dateTime = message.createdAt;
     header.append(author, stamp);
+    if(message.role==='assistant'&&message.usage){const usage=document.createElement('small');const values=[];if(message.usage.totalTokens!=null)values.push(message.usage.totalTokens+' Tokens');if(message.usage.reportedCost!=null)values.push(message.usage.reportedCost+' USD laut Anbieter');usage.textContent=values.join(' · ');header.append(usage);}
     const body = document.createElement('div'); body.className = 'message-body';
     if(message.role === 'assistant') kairosRichText.render(body, message.content);
     else body.textContent = message.content;
@@ -147,6 +150,7 @@ function render(next) {
   renderUpdates();
   renderJobs();
   kairosTts.render(state);
+  kairosHancockPanel.render(state);
   $('#conversation').scrollTop = $('#conversation').scrollHeight;
 }
 function renderUpdates() {
@@ -163,11 +167,8 @@ function renderUpdates() {
   $('#update-source-status').textContent = changed ? 'Adresse geändert. Bitte zuerst prüfen und speichern.' : update?.sourceMessage ?? `Aktive Quelle: ${appliedRepository ?? 'Noch nicht eingerichtet'}`;
   $('#app-version').textContent = update?.version ?? '';
   $('#update-status').textContent = update?.message ?? 'Updates werden vorbereitet.';
-  $('#update-progress').value = update?.progress ?? 0;
-  $('#update-progress').hidden = update?.state !== 'downloading';
   $('#update-check').disabled = !update || locked || changed || update.state === 'disabled';
-  $('#update-download').disabled = locked || changed || update?.state !== 'available';
-  $('#update-install').disabled = update?.operationBusy || update?.sourceChecking || changed || update?.state !== 'downloaded' || !(update.installAllowed || update.unsignedInstallAvailable) || state.busy || state.settingsBusy || state.jobAction || state.tts?.busy || Boolean(input.value.trim());
+  $('#update-open-release').disabled = locked || changed || update?.state !== 'available';
 }
 function updateSend() {
   const busy = Boolean(state?.busy);
@@ -176,6 +177,7 @@ function updateSend() {
   $('#send-button').classList.toggle('cancel', busy);
   $('#send-label').textContent = busy ? (cancelling ? 'Warten wird beendet …' : 'Nicht mehr warten') : ['image-api','comfyui'].includes(profile?.type) ? 'Bild erzeugen' : 'Senden';
   $('#send-icon').textContent = busy ? '×' : '↗';
+  kairosHancockPanel.syncDraft();
 }
 input.addEventListener('input', updateSend);
 input.addEventListener('keydown', event => {
@@ -184,6 +186,7 @@ input.addEventListener('keydown', event => {
 $('#chat-form').addEventListener('submit', async event => {
   event.preventDefault();
   if (!state) return;
+  if (cancelling || state.settingsBusy) return;
   if (state.busy) { cancelling = true; updateSend(); await api.cancel(); return; }
   const text = input.value.trim();
   if (!text) return;
@@ -196,7 +199,7 @@ $('#chat-form').addEventListener('submit', async event => {
     if (result.ok || result.submitted) { draftAttachments = []; renderAttachments(); }
     if (!result.ok) { sendError = result.error; if (!result.submitted && !input.value) input.value = text; }
   } catch { sendError = 'Die Nachricht konnte nicht gesendet werden.'; if (!input.value) input.value = text; }
-  finally { render(await api.state()); if (sendError) error(sendError); input.focus(); }
+  finally { render(await api.state()); if (sendError) error(sendError); }
 });
 $('#delete-chat').addEventListener('click', () => { $('#chat-delete-dialog').showModal(); });
 $('#chat-delete-cancel').addEventListener('click', () => $('#chat-delete-dialog').close());
@@ -219,6 +222,7 @@ async function settingsAction(action, success = '') {
   catch { settingsFeedback('Die Einstellungen konnten nicht geändert werden.'); return { ok: false }; }
 }
 function renderSettings() {
+  kairosProviders.render(state);
   const locked = state.busy || state.settingsBusy || state.jobAction;
   $('#vault-location').textContent = state.security?.vaultDirectory ?? '';
   $('#add-server').disabled = locked;
@@ -227,7 +231,7 @@ function renderSettings() {
   $('#delete-confirm').hidden = !deletion;
   $('#delete-confirm-text').textContent = deletion ? `${deletion.wholeServer ? 'Server mit allen Modellverbindungen' : 'Modellverbindung'} „${deletion.name}“ entfernen? Deine Gespräche und die Modelle auf dem Server bleiben erhalten.` : '';
   $('#delete-confirm-yes').disabled = locked;
-  $('#server-form').querySelectorAll('input,button,select').forEach(field => { field.disabled = locked; });
+  $('#server-form').querySelectorAll('input,button,select,textarea').forEach(field => { field.disabled = locked; });
   $('#profile-form').querySelectorAll('input,button,select').forEach(field => { field.disabled = locked || field.id === 'probe-server' && probing; });
   $('#workflow-form').querySelectorAll('input,button,select').forEach(field => { field.disabled = locked || field.id.startsWith('limit-') && !$(`#mapping-${field.id.split('-')[1]}`)?.value; });
   const cards = state.settings.profiles.map(profile => {
@@ -236,7 +240,7 @@ function renderSettings() {
     const details = document.createElement('div'); details.className = 'profile-details';
     const title = document.createElement('strong'); title.textContent = profile.name;
     const model = document.createElement('span'); model.textContent = profile.model;
-    const address = document.createElement('small'); address.textContent = profile.baseUrl;
+    const address = document.createElement('small'); address.textContent = profile.baseUrl+(profile.apiPath??'');
     const protection = document.createElement('small'); protection.className = profile.baseUrl.startsWith('http:') ? 'transport-warning' : '';
     protection.textContent = profile.ssh?.enabled ? 'SSH · verschlüsselter Tunnel · API-Ziel '+profile.ssh.targetHost+':'+profile.ssh.targetPort : `${profile.baseUrl.startsWith('https:') ? 'HTTPS · verschlüsselte Übertragung' : 'HTTP · unverschlüsselte Heimnetz-Ausnahme'} · ${profile.authType === 'none' ? 'Ohne Zugangsdaten' : 'Zugang im Tresor'}`;
     const capabilities = document.createElement('small'); capabilities.textContent = `${profile.capabilities?.length ? 'Gemeldete Fähigkeiten: ' + profile.capabilities.join(', ') : 'Fähigkeiten noch nicht abgefragt'}${profile.contextLimit ? ' · Kontextgrenze: ' + profile.contextLimit.toLocaleString('de-DE') + ' Tokens' : ''}`;
@@ -280,13 +284,13 @@ function renderSettings() {
     }
     actions.append(use, edit, test, remove); card.append(head, actions); return card;
   });
-  const serverIdentity = p => p.ssh?.enabled ? JSON.stringify([p.ssh.host,p.ssh.port,p.ssh.username,p.ssh.targetHost,p.ssh.targetPort,p.ssh.targetTls]) : p.baseUrl;
+  const serverIdentity = p => JSON.stringify([p.ssh?.enabled ? [p.ssh.host,p.ssh.port,p.ssh.username,p.ssh.targetHost,p.ssh.targetPort,p.ssh.targetTls] : p.baseUrl,p.provider??'custom',p.apiPath??'/v1']);
   const grouped = []; const origins = new Set();
   state.settings.profiles.forEach((profile, index) => {
     if (!origins.has(serverIdentity(profile))) {
       origins.add(serverIdentity(profile));
       const header = document.createElement('div'); header.className = 'server-group-heading';
-      const name = document.createElement('strong'); name.textContent = profile.baseUrl;
+      const name = document.createElement('strong'); name.textContent = profile.baseUrl+(profile.apiPath??'');
       const refresh = document.createElement('button'); refresh.type = 'button'; refresh.className = 'secondary-button'; refresh.textContent = 'Modelle & Zugang aktualisieren'; refresh.disabled = locked;
       refresh.textContent = 'Modelle laden';
       refresh.addEventListener('click', () => settingsAction(() => api.refreshServer(profile.id), 'Modellliste aktualisiert. Neue Modelle kannst du jetzt aktivieren.'));
@@ -353,6 +357,7 @@ function editProfile(profile) {
   $('#profile-type').value = profile?.type ?? 'ollama';
   $('#profile-name').value = profile?.name ?? '';
   $('#profile-url').value = profile?.baseUrl ?? '';
+  $('#profile-provider').value=profile?.provider??'custom';$('#profile-api-path').value=profile?.apiPath??'/v1';profileEndpointFields();
   $('#profile-model').value = profile?.model ?? '';
   $('#profile-enabled').checked = profile?.enabled ?? true;
   $('#profile-http').checked = profile?.allowHttp ?? false;
@@ -374,12 +379,27 @@ function authFields() {
 function editServer(profile) {
   clearServerSecret(); $('#server-form').hidden = false; $('#profile-form').hidden = true;
   $('#server-id').value = profile?.id ?? ''; $('#server-name').value = profile ? profile.name.split(' · ')[0].slice(0, 30) : '';
+  $('#server-model-names').value='';
   $('#server-type').value = profile?.type ?? 'auto';
   $('#server-url').value = profile?.baseUrl ?? ''; $('#server-auth').value = profile?.authType ?? 'none';
+  $('#server-provider').value=profile?.provider??'custom';$('#server-api-path').value=profile?.apiPath??'/v1';serverEndpointFields(false);
   $('#server-http').checked = profile?.allowHttp ?? false; $('#server-feedback').textContent = '';
   const ssh=profile?.ssh;$('#ssh-enabled').checked=!!ssh?.enabled;$('#ssh-host').value=ssh?.host??'192.168.0.175';$('#ssh-port').value=ssh?.port??22;$('#ssh-user').value=ssh?.username??'hancock';$('#ssh-target').value=ssh?.targetHost??'127.0.0.1';$('#ssh-target-port').value=ssh?.targetPort??8000;$('#ssh-local-port').value=ssh?.localPort??18000;$('#ssh-auth').value=ssh?.authType??'agent';$('#ssh-key-ref').value=ssh?.credentialsRef??'';$('#ssh-target-tls').checked=ssh?.targetTls??false;sshFields();
   authFields(); $('#server-name').focus(); $('#server-form').scrollIntoView({ block: 'nearest' });
 }
+function serverEndpointFields(applyPreset) {
+  const compatible=$('#server-type').value==='openai-chat';$('#server-provider-fields').hidden=!compatible;
+  const preset=compatible?kairosProviders.preset($('#server-provider').value):null;
+  $('#server-url').readOnly=$('#server-api-path').readOnly=Boolean(preset);
+  if(applyPreset && preset){clearServerSecret();$('#server-url').value=preset.baseUrl;$('#server-api-path').value=preset.apiPath;$('#server-name').value=preset.name;$('#server-auth').value='bearer';$('#server-http').checked=false;$('#ssh-enabled').checked=false;sshFields();authFields();}
+}
+function profileEndpointFields() {
+  const compatible=$('#profile-type').value==='openai-chat';$('#profile-api-fields').hidden=!compatible;
+  const provider=$('#profile-provider').value;$('#profile-provider-name').textContent=provider==='custom'?'Eigener kompatibler Anschluss':kairosProviders.preset(provider)?.name??provider;
+  $('#profile-url').readOnly=$('#profile-api-path').readOnly=compatible&&provider!=='custom';
+}
+$('#server-provider').addEventListener('change',()=>{clearServerSecret();serverEndpointFields(true);});
+$('#profile-type').addEventListener('change',profileEndpointFields);
 function settingsTab(tab) {
   for (const name of ['local', 'tts-settings', 'security', 'litellm', 'updates']) { $(`#${name}-panel`).hidden = tab !== name; $(`#tab-${name}`).classList.toggle('selected', tab === name); }
   clearServerSecret();
@@ -413,12 +433,12 @@ $('#update-source-form').addEventListener('submit', async event => {
 });
 $('#update-beta').addEventListener('change', () => settingsAction(() => api.setBetaUpdates($('#update-beta').checked), 'Updatekanal gespeichert. Bitte erneut prüfen.'));
 $('#update-check').addEventListener('click', () => settingsAction(() => api.checkUpdates()));
-$('#update-download').addEventListener('click', () => settingsAction(() => api.downloadUpdate()));
-$('#update-install').addEventListener('click', () => settingsAction(() => api.installUpdate()));
+$('#update-open-release').addEventListener('click', () => settingsAction(() => api.openUpdateRelease()));
 $('#add-server').addEventListener('click', () => editServer(null));
 $('#server-form-close').addEventListener('click', () => { clearServerSecret(); $('#server-form').hidden = true; });
 $('#server-auth').addEventListener('change', () => { clearServerSecret(); authFields(); });
 $('#server-type').addEventListener('change', () => {
+  serverEndpointFields(false);
   if ($('#server-type').value === 'comfyui' && !$('#server-url').value) {
     $('#server-url').value = 'http://192.168.0.175:8188';
   }
@@ -429,6 +449,8 @@ $('#server-form').addEventListener('submit', async event => {
   const type = $('#server-auth').value;
   const request = {
     type: $('#server-type').value,
+    ...($('#server-type').value==='openai-chat'?{provider:$('#server-provider').value,apiPath:$('#server-api-path').value}:{}),
+    ...($('#server-model-names').value.trim()?{modelNames:$('#server-model-names').value.trim().split(/\r?\n/).map(n=>n.trim()).filter(Boolean)}:{}),
     id: $('#server-id').value || undefined, name: $('#server-name').value, baseUrl: $('#server-url').value, allowHttp: $('#server-http').checked,
     auth: { type, token: $('#server-secret').value, username: $('#server-user').value, password: $('#server-secret').value },
     ssh: sshConfig(), sshSecret: $('#ssh-secret').value,
@@ -450,7 +472,7 @@ $('#probe-server').addEventListener('click', async () => {
   probing = true; const address = $('#profile-url').value; $('#probe-server').disabled = true; $('#probe-feedback').textContent = 'Verbindung wird geprüft …';
   try {
     const original = state.settings.profiles.find(p => p.id === $('#profile-id').value);
-    const result = await api.probeServer(original?.baseUrl === address && original.type === $('#profile-type').value ? { id: original.id } : { type: $('#profile-type').value, baseUrl: address, allowHttp: $('#profile-http').checked });
+    const result = await api.probeServer(original?.baseUrl === address && original.type === $('#profile-type').value && (original.apiPath??'/v1')===$('#profile-api-path').value ? { id: original.id } : { type: $('#profile-type').value, baseUrl: address, allowHttp: $('#profile-http').checked,provider:$('#profile-provider').value,apiPath:$('#profile-api-path').value });
     if ($('#profile-url').value !== address) return;
     $('#model-options').replaceChildren();
     if (!result.ok) { $('#probe-feedback').textContent = result.error; return; }
@@ -465,6 +487,7 @@ $('#profile-form').addEventListener('submit', async event => {
   const result = await settingsAction(() => api.saveProfile({
     id: $('#profile-id').value || undefined, name: $('#profile-name').value,
     type: $('#profile-type').value,
+    ...($('#profile-type').value==='openai-chat'?{provider:$('#profile-provider').value,apiPath:$('#profile-api-path').value}:{}),
     baseUrl: $('#profile-url').value, model: $('#profile-model').value, enabled: $('#profile-enabled').checked,
     uploads: { files: $('#profile-files').checked, photos: $('#profile-photos').checked }, allowHttp: $('#profile-http').checked, options: { temperature: Number($('#profile-temperature').value), num_ctx: Number($('#profile-context').value), num_predict: Number($('#profile-output').value) },
   }), 'Verbindung gespeichert.');
@@ -477,5 +500,41 @@ $('#ssh-key-import').addEventListener('click',async()=>{const config=sshConfig()
 $('#ssh-trust-yes').addEventListener('click',async()=>{const id=trustId;if(id){const r=await api.trustSSHHost(id,true);if(!r.ok)settingsFeedback(r.error)}});
 $('#ssh-trust-no').addEventListener('click',()=>{if(trustId)void api.trustSSHHost(trustId,false)});
 $('#ssh-trust-dialog').addEventListener('cancel',event=>{event.preventDefault();if(trustId)void api.trustSSHHost(trustId,false)});
+kairosProviders.init({
+  openLink:url=>api.openLink(url),checkQuota:id=>settingsAction(()=>api.checkProviderQuota(id)),
+  setup:id=>{editServer(null);$('#server-type').value='openai-chat';$('#server-provider').value=id;serverEndpointFields(true);$('#server-form').scrollIntoView({block:'nearest'});},
+});
+kairosHancockPanel.init({
+  getDraft: () => input.value,
+  setDraft: value => { input.value = value; updateSend(); },
+  isCancelling: () => cancelling,
+  submit: () => $('#chat-form').requestSubmit(),
+  attach: () => $('#attach-file').click(),
+  drop: async files => {
+    for (const file of files) {
+      if ($('#attach-file').disabled) {error('Anhänge sind hier gerade nicht möglich oder die Grenze von vier Dateien ist erreicht.');break;}
+      try {
+        const result = await api.dropAttachment(file);
+        if (!result.ok) {error(result.error);break;}
+        draftAttachments.push(result.attachment);renderAttachments();
+      } catch {error('Die Datei konnte nicht angehängt werden.');break;}
+    }
+  },
+  attachDisabled: () => $('#attach-file').disabled,
+  attachmentNames: () => draftAttachments.map(a => a.name),
+  selectProfile: id => api.selectProfile(id),
+  selectChat: id => api.select(id),
+  newChat: () => api.newChat(),
+  savePreferences: value => api.saveHancock(value),
+  showChat: async id => {
+    if (id) {
+      try {const result=await api.select(id);if(!result.ok){error(result.error);return;}}
+      catch {error('Das Ergebnisgespräch konnte nicht geöffnet werden.');return;}
+    }
+    $('#chat-tab').click(); input.focus();
+  },
+  showJobs: () => $('#job-list').scrollIntoView({block:'nearest'}),
+  showTts: () => $('#tts-toggle').click(),
+});
 api.onState(render);
 api.state().then(render).catch(() => error('Das Programm konnte nicht initialisiert werden.'));

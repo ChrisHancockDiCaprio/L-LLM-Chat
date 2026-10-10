@@ -7,6 +7,7 @@ import { imageModels } from './image-client.mjs';
 import { openaiModels, readServerJson } from './openai-client.mjs';
 import { inspectComfyUI } from './comfyui-client.mjs';
 import { githubSource, repositoryUrl } from './update-source.mjs';
+import {endpointFields} from './api-endpoint.mjs';
 export { normalizeOrigin } from './connection-security.mjs';
 
 export function validateProfile(raw) {
@@ -23,6 +24,7 @@ export function validateProfile(raw) {
   if (raw.allowHttp !== undefined && typeof raw.allowHttp !== 'boolean') throw new Error('Ungültige HTTP-Freigabe.');
   if (raw.authRef != null && (typeof raw.authRef !== 'string' || raw.authRef.length > 100)) throw new Error('Ungültiger Zugang.');
   return {
+    ...endpointFields(raw),
     ssh: validateSSH(raw.ssh), id: raw.id, type: raw.type ?? 'ollama', name: raw.name.trim(), baseUrl: normalizeOrigin(raw.baseUrl), model: raw.model.trim(), enabled: raw.enabled,
     allowHttp: raw.allowHttp === true, authRef: raw.authRef ?? null,
     ...(raw.type === 'comfyui' ? { serverInfo: { modelFiles: Array.isArray(raw.serverInfo?.modelFiles) ? raw.serverInfo.modelFiles.filter(f => typeof f === 'string' && f.length <= 200 && !/[\x00-\x1f]/.test(f)).slice(0, 100) : [], ggufAvailable: raw.serverInfo?.ggufAvailable === true, nodeCount: Number.isInteger(raw.serverInfo?.nodeCount) ? raw.serverInfo.nodeCount : 0 } } : {}),
@@ -40,7 +42,9 @@ function validateSettings(raw) {
   const excludedModels = raw.excludedModels ?? [];
   if (!Array.isArray(excludedModels) || excludedModels.length > 500 || excludedModels.some(p => !['ollama', 'openai-chat', 'image-api', 'comfyui'].includes(p?.type) || typeof p.model !== 'string' || !p.model || p.model.length > 200 || /\s|[\x00-\x1f]/.test(p.model))) throw new Error('Ungültige Liste entfernter Modelle.');
   const updateRepository = raw.updateRepository == null ? null : repositoryUrl(githubSource(raw.updateRepository));
-  return { version: 1, activeId: raw.activeId, profiles, updateRepository, betaUpdates: raw.betaUpdates === true, excludedModels: excludedModels.map(p => ({ baseUrl: normalizeOrigin(p.baseUrl), type: p.type, model: p.model, destination: p.destination ?? normalizeOrigin(p.baseUrl) })) };
+  const hancock = raw.hancock ?? {visible:true,paused:false};
+  if (!hancock || typeof hancock.visible !== 'boolean' || typeof hancock.paused !== 'boolean') throw new Error('Ungültige Hancock-Einstellungen.');
+  return { version: 1, activeId: raw.activeId, profiles, updateRepository, hancock: {visible:hancock.visible,paused:hancock.paused}, betaUpdates: raw.betaUpdates === true, excludedModels: excludedModels.map(p => ({ baseUrl: normalizeOrigin(p.baseUrl), type: p.type, model: p.model, destination: p.destination ?? normalizeOrigin(p.baseUrl) })) };
 }
 export class SettingsStore {
   constructor(directory, cipher, { legacyDirectory, legacyHttpAllowed = false } = {}) {
@@ -86,24 +90,30 @@ export class SettingsStore {
     if (typeof value !== 'boolean') throw new Error('Ungültiger Updatekanal.');
     return this.commit({ ...this.snapshot(), betaUpdates: value });
   }
+  async setHancock(value) {
+    if (!value || typeof value.visible !== 'boolean' || typeof value.paused !== 'boolean') throw new Error('Ungültige Hancock-Einstellungen.');
+    return this.commit({...this.snapshot(),hancock:{visible:value.visible,paused:value.paused}});
+  }
   async setUpdateRepository(url) {
     return this.commit({ ...this.snapshot(), updateRepository: repositoryUrl(githubSource(url)) });
   }
-  async importServer({ name, baseUrl, allowHttp, models, authRef, authType, type = 'ollama', restoreRemoved = false, ssh }) {
+  async importServer({ name, baseUrl, allowHttp, models, authRef, authType, type = 'ollama', restoreRemoved = false, ssh, provider, apiPath }) {
     if (typeof name !== 'string' || !name.trim() || name.length > 30) throw new Error('Servername muss zwischen 1 und 30 Zeichen lang sein.');
     const origin = normalizeOrigin(baseUrl); const next = this.snapshot();
     if (!Array.isArray(models) || !models.length) throw new Error('Der Server hat noch keine Modelle.');
     for (const info of models) {
       const modelType = info.type ?? type;
-      const sameModel = p => (p.destination ?? apiDestination(p)) === apiDestination({baseUrl:origin,ssh}) && p.model === info.name && p.type === modelType;
+      const endpoint=endpointFields({type:modelType,baseUrl:origin,ssh,provider,apiPath});
+      const sameModel = p => (p.destination ?? apiDestination(p)) === apiDestination({baseUrl:origin,ssh,type:modelType,...endpoint}) && p.model === info.name && p.type === modelType;
       if (!restoreRemoved && next.excludedModels.some(sameModel)) continue;
       if (restoreRemoved) next.excludedModels = next.excludedModels.filter(p => !sameModel(p));
       const existing = next.profiles.find(sameModel);
+      if(!existing && next.profiles.length>=100) continue;
       const reportedLimit = Number.isInteger(info.contextLimit) && info.contextLimit > 0 ? info.contextLimit : null;
       const chatCapable = !info.capabilities?.includes('embedding') || info.capabilities.includes('completion');
       const modelProfile = validateProfile({
         ...existing, id: existing?.id ?? randomUUID(), name: existing?.name ?? `${name.trim()} · ${info.name}`.slice(0, 60),
-        ssh: ssh ?? null, type: modelType, baseUrl: origin, model: info.name, enabled: chatCapable && (existing?.enabled ?? false), allowHttp, authRef, authType,
+        ssh: ssh ?? null, type: modelType, ...endpoint, baseUrl: origin, model: info.name, enabled: chatCapable && (existing?.enabled ?? false), allowHttp, authRef, authType,
         capabilities: info.detailsAvailable === false ? existing?.capabilities ?? [] : info.capabilities, contextLimit: reportedLimit ?? existing?.contextLimit, serverInfo: info.serverInfo ?? existing?.serverInfo,
         options: { ...(existing?.options ?? { num_ctx: 8192, num_predict: 2048, temperature: 0.7 }), num_ctx: Math.min(existing?.options?.num_ctx ?? 8192, reportedLimit ?? existing?.contextLimit ?? 32768) },
       });
